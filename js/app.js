@@ -75,12 +75,21 @@ const App = (() => {
   }
 
   /* ===== Init ===== */
+  let _navBound = false;
   async function init() {
-    document.getElementById('bottomnav').addEventListener('click', e => {
-      const btn = e.target.closest('.navitem');
-      if (btn) goTab(btn.dataset.tab);
-    });
-    data = await Store.load();
+    Store.init();
+    if (!_navBound) {
+      document.getElementById('bottomnav').addEventListener('click', e => {
+        const btn = e.target.closest('.navitem');
+        if (btn) goTab(btn.dataset.tab);
+      });
+      _navBound = true;
+    }
+    const loaded = await Store.load();
+    if (!loaded) { Auth.renderAuthScreen(); return; }
+    if (loaded._needPair) { Auth.renderPairScreen(); return; }
+    data = loaded;
+    Store.subscribe(newData => { data = newData; renderNav(); render(); });
     renderNav();
     render();
   }
@@ -167,7 +176,7 @@ const App = (() => {
 
   async function addPhoto(e) {
     const file = e.target.files[0]; if (!file) return;
-    const src = await Store.compressImage(file, 600);
+    const src = await Store.uploadImage(file);
     if (!data.photos) data.photos = [];
     data.photos.push({ id: Store.nextId(data.photos), src, note: '' });
     persist(); render();
@@ -570,14 +579,12 @@ const App = (() => {
   function renderSettings() {
     const c = data.couple;
     const nameText = (c.nameA && c.nameB) ? `${c.nameA} & ${c.nameB}` : '未设置';
-    const fileStatus = Store.getFileStatus();
-    const fileLabel = fileStatus.hasHandle ? `已绑定：${fileStatus.fileName || 'data.json'}` : '未绑定';
     return `
       <div class="settings-group">
         <div class="settings-item" onclick="App.editCouple()"><span class="settings-item__label">恋爱信息</span><span><span class="settings-item__value">${esc(nameText)}</span> <span class="settings-item__arrow">&rsaquo;</span></span></div>
       </div>
       <div class="settings-group">
-        <div class="settings-item" onclick="App.bindDataFile()"><span class="settings-item__label">绑定数据文件</span><span><span class="settings-item__value">${esc(fileLabel)}</span> <span class="settings-item__arrow">&rsaquo;</span></span></div>
+        <div class="settings-item" onclick="App.showInviteCode()"><span class="settings-item__label">邀请码（发给对方）</span><span class="settings-item__arrow">&rsaquo;</span></div>
       </div>
       <div class="settings-group">
         <div class="settings-item" onclick="App.editNavConfig()"><span class="settings-item__label">底部导航布局</span><span class="settings-item__arrow">&rsaquo;</span></div>
@@ -590,7 +597,10 @@ const App = (() => {
       <div class="settings-group">
         <div class="settings-item" onclick="App.clearData()"><span class="settings-item__label" style="color:#c0392b">清除所有数据</span><span class="settings-item__arrow">&rsaquo;</span></div>
       </div>
-      <div style="text-align:center;padding:1.5rem 0;font-size:.75rem;color:var(--text3)">恋爱日志 · 数据仅存于本地</div>`;
+      <div class="settings-group">
+        <div class="settings-item" onclick="Auth.logout()"><span class="settings-item__label" style="color:#c0392b">退出登录</span><span class="settings-item__arrow">&rsaquo;</span></div>
+      </div>
+      <div style="text-align:center;padding:1.5rem 0;font-size:.75rem;color:var(--text3)">恋爱日志 · 数据云端同步</div>`;
   }
 
   function editCouple() {
@@ -603,11 +613,9 @@ const App = (() => {
   }
   function saveCouple() { data.couple.startDate=v('f_start'); data.couple.nameA=v('f_na'); data.couple.nameB=v('f_nb'); persist(); closeModal(); render(); }
 
-  async function bindDataFile() {
-    const ok = await Store.bindDataFile();
-    if (!ok) { alert('绑定失败，请确认浏览器支持并选择 data.json'); return; }
-    alert('绑定成功，后续修改会写入该文件');
-    render();
+  async function showInviteCode() {
+    const code = await Store.getInviteCode();
+    Auth.showInviteCode(code || '加载失败');
   }
 
   /* ===== 导航布局编辑器 ===== */
@@ -796,7 +804,7 @@ const App = (() => {
 
   return {
     get data() { return data; },
-    render, goTab, goSub, goBack, closeModal, renderNav,
+    init, render, goTab, goSub, goBack, closeModal, showModal, renderNav,
     addPhoto, viewPhoto,
     editMilestone, saveMilestone,
     editDate, saveDate,
@@ -811,7 +819,7 @@ const App = (() => {
     editSeriesTitle, saveSeriesTitle, delSeries,
     editSeriesItem, saveSeriesItem, delSeriesItem,
     editCouple, saveCouple,
-    bindDataFile,
+    showInviteCode,
     editNavConfig, navToggle, navMove, saveNavConfig, resetNavConfig,
     del, handleImport, clearData
   };

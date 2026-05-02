@@ -1,126 +1,180 @@
 /**
- * store.js — 数据持久化层
+ * store.js — Supabase 云端持久化层
  */
 const Store = (() => {
-  const KEY = 'love_notebook_data';
-  let fileHandle = null;
-  let fileName = '';
+  let sb = null;
+  let coupleId = null;
+  let channel = null;
+  let _initialized = false;
+  let _lastSaveTime = 0;
 
-  const defaultData = {
+  const defaultDataObj = {
     couple: { startDate: '', nameA: '', nameB: '' },
-    milestones: [],  // 时光节点
-    dates: [],       // 约会记录
-    plans: [],       // 愿望
-    memos: [],       // 备忘
-    travels: [],     // 旅行足迹
-    series: [],      // 系列
-    photos: [],      // 照片墙
-    treaties: [],    // 恋爱条约 { id, content }
-    navConfig: null  // 底部导航配置 [{ key, nav:true/false }]，null 表示使用默认
+    milestones: [],
+    dates: [],
+    plans: [],
+    memos: [],
+    travels: [],
+    series: [],
+    photos: [],
+    treaties: [],
+    navConfig: null
   };
 
-  function cloneDefault() { return JSON.parse(JSON.stringify(defaultData)); }
+  /* ===== 初始化 ===== */
+  function init() {
+    if (_initialized) return;
+    const url = window.__SUPABASE_URL__;
+    const key = window.__SUPABASE_ANON_KEY__;
+    if (url && key && window.supabase) {
+      sb = window.supabase.createClient(url, key);
+    }
+    _initialized = true;
+  }
+
+  function client() { return sb; }
+
+  /* ===== 用户 & 配对 ===== */
+  async function getUser() {
+    if (!sb) return null;
+    const { data: { user } } = await sb.auth.getUser();
+    return user;
+  }
+
+  async function findCoupleId(userId) {
+    const { data } = await sb.from('couple_members')
+      .select('couple_id')
+      .eq('user_id', userId)
+      .maybeSingle();
+    return data?.couple_id || null;
+  }
+
+  async function createCouple() {
+    const user = await getUser();
+    if (!user) return null;
+    const { data: couple, error } = await sb.from('couples')
+      .insert({ data: cloneDefault() })
+      .select()
+      .single();
+    if (error) { console.error('createCouple', error); return null; }
+    await sb.from('couple_members')
+      .insert({ couple_id: couple.id, user_id: user.id });
+    coupleId = couple.id;
+    return couple;
+  }
+
+  async function joinCouple(inviteCode) {
+    const user = await getUser();
+    if (!user) return { error: '未登录' };
+    const { data: cid, error: lookupErr } = await sb
+      .rpc('lookup_couple_by_invite', { code: inviteCode.toUpperCase() });
+    if (lookupErr || !cid) return { error: '邀请码无效' };
+    const { error } = await sb.from('couple_members')
+      .insert({ couple_id: cid, user_id: user.id });
+    if (error) {
+      if (error.code === '23505') return { error: '你已加入了一个空间' };
+      return { error: error.message };
+    }
+    coupleId = cid;
+    return { ok: true };
+  }
+
+  async function getInviteCode() {
+    if (!sb || !coupleId) return '';
+    const { data } = await sb.from('couples')
+      .select('invite_code')
+      .eq('id', coupleId)
+      .single();
+    return data?.invite_code || '';
+  }
+
+  /* ===== 数据加载 ===== */
+  async function load() {
+    init();
+    if (!sb) return cloneDefault();
+    const user = await getUser();
+    if (!user) return null;                    // 未登录
+    coupleId = await findCoupleId(user.id);
+    if (!coupleId) return { _needPair: true };  // 已登录但未配对
+    const { data: row, error } = await sb.from('couples')
+      .select('data')
+      .eq('id', coupleId)
+      .single();
+    if (error || !row) return cloneDefault();
+    return normalizeData(row.data || {});
+  }
+
+  /* ===== 数据保存 ===== */
+  async function save(data) {
+    if (!sb || !coupleId) return;
+    _lastSaveTime = Date.now();
+    const clean = Object.assign({}, data);
+    delete clean._needPair;
+    await sb.from('couples')
+      .update({ data: clean, updated_at: new Date().toISOString() })
+      .eq('id', coupleId);
+  }
+
+  /* ===== 实时同步 ===== */
+  function subscribe(onChange) {
+    if (!sb || !coupleId) return;
+    channel = sb.channel('couple-sync')
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'couples',
+        filter: 'id=eq.' + coupleId
+      }, function(payload) {
+        // 忽略自己刚保存后 2 秒内的回声
+        if (Date.now() - _lastSaveTime < 2000) return;
+        var d = payload.new && payload.new.data;
+        if (d) onChange(normalizeData(d));
+      })
+      .subscribe();
+  }
+
+  function unsubscribe() {
+    if (channel && sb) { sb.removeChannel(channel); channel = null; }
+  }
+
+  /* ===== 图片上传 ===== */
+  async function uploadImage(file) {
+    var compressed = await compressImage(file);
+    if (!sb || !coupleId) return compressed;
+    var blob = dataURLtoBlob(compressed);
+    var path = coupleId + '/' + Date.now() + '.jpg';
+    var result = await sb.storage.from('photos')
+      .upload(path, blob, { contentType: 'image/jpeg' });
+    if (result.error) { console.warn('图片上传失败', result.error); return compressed; }
+    var pub = sb.storage.from('photos').getPublicUrl(path);
+    return pub.data.publicUrl;
+  }
+
+  /* ===== 工具函数 ===== */
+  function cloneDefault() { return JSON.parse(JSON.stringify(defaultDataObj)); }
 
   function normalizeData(d) {
     if (!d || typeof d !== 'object') return cloneDefault();
-    for (const k of Object.keys(defaultData)) {
-      if (!(k in d)) d[k] = Array.isArray(defaultData[k]) ? [] : (typeof defaultData[k] === 'object' && !Array.isArray(defaultData[k]) ? {} : '');
+    for (var k in defaultDataObj) {
+      if (!(k in d)) {
+        d[k] = Array.isArray(defaultDataObj[k]) ? [] :
+          (typeof defaultDataObj[k] === 'object' && !Array.isArray(defaultDataObj[k]) ? {} : '');
+      }
     }
     return d;
   }
 
-  function loadFromLocalStorage() {
-    try {
-      const raw = localStorage.getItem(KEY);
-      if (raw) return normalizeData(JSON.parse(raw));
-    } catch (e) { console.warn('本地存储读取失败', e); }
-    return cloneDefault();
+  function nextId(arr) {
+    return (!arr || !arr.length) ? 1 : Math.max.apply(null, arr.map(function(i) { return i.id || 0; })) + 1;
   }
 
-  async function loadFromFetch() {
-    try {
-      const res = await fetch('data.json', { cache: 'no-store' });
-      if (!res.ok) return null;
-      const d = await res.json();
-      return normalizeData(d);
-    } catch (e) { console.warn('data.json 读取失败', e); }
-    return null;
-  }
-
-  async function load() {
-    const fileData = await loadFromFetch();
-    if (fileData) return fileData;
-    return loadFromLocalStorage();
-  }
-
-  async function ensureFileHandle() {
-    if (fileHandle) return true;
-    if (!window.showSaveFilePicker) return false;
-    try {
-      fileHandle = await window.showSaveFilePicker({
-        suggestedName: 'data.json',
-        types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }]
-      });
-      fileName = fileHandle?.name || 'data.json';
-      return true;
-    } catch { return false; }
-  }
-
-  async function bindDataFile() {
-    if (!window.showOpenFilePicker) return false;
-    try {
-      const [handle] = await window.showOpenFilePicker({
-        multiple: false,
-        types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }]
-      });
-      fileHandle = handle;
-      fileName = handle?.name || 'data.json';
-      return true;
-    } catch { return false; }
-  }
-
-  async function save(data) {
-    const text = JSON.stringify(data, null, 2);
-    if (fileHandle || await ensureFileHandle()) {
-      try {
-        const writable = await fileHandle.createWritable();
-        await writable.write(text);
-        await writable.close();
-        return true;
-      } catch (e) { console.warn('数据写入失败', e); }
-    }
-    localStorage.setItem(KEY, text);
-    return false;
-  }
-  function nextId(arr) { return (!arr || !arr.length) ? 1 : Math.max(...arr.map(i => i.id || 0)) + 1; }
-
-  function exportJSON(data) {
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'data.json';
-    a.click();
-    URL.revokeObjectURL(a.href);
-  }
-
-  function importJSON(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = e => { try { resolve(JSON.parse(e.target.result)); } catch (err) { reject(err); } };
-      reader.onerror = reject;
-      reader.readAsText(file);
-    });
-  }
-
-  function getFileStatus() { return { hasHandle: !!fileHandle, fileName }; }
-
-  /** 压缩图片为 base64 (max 600px 宽, JPEG 0.7) */
-  function compressImage(file, maxW = 600) {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => {
-        const c = document.createElement('canvas');
-        let w = img.width, h = img.height;
+  function compressImage(file, maxW) {
+    maxW = maxW || 600;
+    return new Promise(function(resolve) {
+      var img = new Image();
+      img.onload = function() {
+        var c = document.createElement('canvas');
+        var w = img.width, h = img.height;
         if (w > maxW) { h = h * maxW / w; w = maxW; }
         c.width = w; c.height = h;
         c.getContext('2d').drawImage(img, 0, 0, w, h);
@@ -130,5 +184,44 @@ const Store = (() => {
     });
   }
 
-  return { load, save, nextId, exportJSON, importJSON, compressImage, defaultData, cloneDefault, bindDataFile, getFileStatus };
+  function dataURLtoBlob(dataURL) {
+    var parts = dataURL.split(',');
+    var mime = parts[0].match(/:(.*?);/)[1];
+    var bin = atob(parts[1]);
+    var arr = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    return new Blob([arr], { type: mime });
+  }
+
+  function exportJSON(data) {
+    var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'data.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  function importJSON(file) {
+    return new Promise(function(resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function(e) {
+        try { resolve(JSON.parse(e.target.result)); }
+        catch (err) { reject(err); }
+      };
+      reader.onerror = reject;
+      reader.readAsText(file);
+    });
+  }
+
+  return {
+    init: init, client: client, getUser: getUser,
+    load: load, save: save,
+    subscribe: subscribe, unsubscribe: unsubscribe,
+    createCouple: createCouple, joinCouple: joinCouple, getInviteCode: getInviteCode,
+    uploadImage: uploadImage,
+    nextId: nextId, compressImage: compressImage,
+    exportJSON: exportJSON, importJSON: importJSON,
+    cloneDefault: cloneDefault, defaultData: defaultDataObj
+  };
 })();
