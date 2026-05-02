@@ -1,9 +1,20 @@
 -- ============================================================
--- Romance Journey — Supabase 数据库初始化脚本
--- 在 Supabase Dashboard → SQL Editor 中执行此脚本
+-- Romance Journey — 完整重置脚本
 -- ============================================================
 
--- 1. 情侣主表（data 列存储完整 JSON 数据）
+-- 0. 清理旧数据
+-- drop policy if exists "Members can view own couple" on couples;
+-- drop policy if exists "Members can update own couple" on couples;
+-- drop policy if exists "Authenticated users can create couple" on couples;
+-- drop policy if exists "Users can view own memberships" on couple_members;
+-- drop policy if exists "Users can join a couple" on couple_members;
+-- drop policy if exists "Authenticated users can upload photos" on storage.objects;
+-- drop policy if exists "Anyone can view photos" on storage.objects;
+-- drop function if exists lookup_couple_by_invite;
+-- drop table if exists couple_members;
+-- drop table if exists couples;
+
+-- 1. 情侣主表
 create table couples (
   id uuid primary key default gen_random_uuid(),
   data jsonb not null default '{}'::jsonb,
@@ -19,10 +30,10 @@ create table couple_members (
   primary key (couple_id, user_id)
 );
 
--- 3. 为 user_id 创建索引，加速查找
+-- 3. 索引
 create index idx_couple_members_user on couple_members(user_id);
 
--- 4. 启用 Row Level Security
+-- 4. 启用 RLS
 alter table couples enable row level security;
 alter table couple_members enable row level security;
 
@@ -48,7 +59,7 @@ create policy "Users can join a couple"
   on couple_members for insert
   with check (user_id = auth.uid());
 
--- 7. 邀请码查找函数（绕过 RLS，仅返回 ID）
+-- 7. 邀请码查找函数
 create or replace function lookup_couple_by_invite(code text)
 returns uuid
 language sql
@@ -58,11 +69,10 @@ as $$
   select id from couples where invite_code = upper(code) limit 1;
 $$;
 
--- 8. 启用 Realtime（实时同步）
+-- 8. 启用 Realtime
 alter publication supabase_realtime add table couples;
 
--- 9. Storage: 在 Dashboard 手动创建 bucket "photos"（设为 Public）
---    然后执行以下存储策略：
+-- 9. Storage 策略（photos bucket 需先在 Dashboard 手动创建）
 create policy "Authenticated users can upload photos"
   on storage.objects for insert
   with check (bucket_id = 'photos' and auth.uid() is not null);
@@ -70,3 +80,6 @@ create policy "Authenticated users can upload photos"
 create policy "Anyone can view photos"
   on storage.objects for select
   using (bucket_id = 'photos');
+
+-- 10. 确认所有未验证的用户
+update auth.users set email_confirmed_at = now() where email_confirmed_at is null;
