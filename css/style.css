@@ -261,5 +261,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .auth-form input:focus{border-color:var(--accent);background:var(--surface)}
 .auth-btn{width:100%;padding:.65rem;font-size:.9rem;border-radius:20px;cursor:pointer;font-family:var(--font)}
 .auth-error{font-size:.82rem;color:var(--accent);min-height:1.2em;margin-top:.3rem}
+.auth-remember{display:flex;align-items:center;gap:.4rem;font-size:.82rem;color:var(--text2);cursor:pointer;user-select:none;margin:-.2rem 0}
+.auth-remember input[type="checkbox"]{width:15px;height:15px;accent-color:var(--accent);cursor:pointer;margin:0}
 .auth-divider{display:flex;align-items:center;gap:.6rem;margin:.3rem 0;color:var(--text3);font-size:.8rem}
 .auth-divider::before,.auth-divider::after{content:'';flex:1;border-top:1px solid var(--border)}

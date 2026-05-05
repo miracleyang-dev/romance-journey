@@ -3,23 +3,90 @@
  */
 const Auth = (() => {
 
+  /* ===== 本地凭据缓存（记住密码） ===== */
+  const _CRED_KEY = 'rj_saved_credentials';
+
+  function _saveCredentials(email, pwd) {
+    try {
+      var payload = JSON.stringify({ e: email, p: pwd });
+      localStorage.setItem(_CRED_KEY, btoa(unescape(encodeURIComponent(payload))));
+    } catch (ex) { /* 静默失败 */ }
+  }
+
+  function _loadCredentials() {
+    try {
+      var raw = localStorage.getItem(_CRED_KEY);
+      if (!raw) return null;
+      var decoded = decodeURIComponent(escape(atob(raw)));
+      return JSON.parse(decoded);
+    } catch (ex) { return null; }
+  }
+
+  function _clearCredentials() {
+    try { localStorage.removeItem(_CRED_KEY); } catch (ex) { /* ignore */ }
+  }
+
   function renderAuthScreen() {
     document.getElementById('bottomnav').innerHTML = '';
     document.getElementById('backBtn').hidden = true;
     document.getElementById('topTitle').textContent = '恋爱日志';
+
+    // 尝试自动登录（有已保存的凭据时）
+    var saved = _loadCredentials();
+    if (saved && saved.e && saved.p) {
+      document.getElementById('main').innerHTML =
+        '<div class="auth-screen">' +
+          '<div class="auth-heart">&hearts;</div>' +
+          '<h2 class="auth-title">恋爱日志</h2>' +
+          '<p class="auth-subtitle">自动登录中...</p>' +
+          '<div class="auth-form">' +
+            '<div class="auth-error" id="authError"></div>' +
+          '</div>' +
+        '</div>';
+      _autoLogin(saved.e, saved.p);
+      return;
+    }
+
+    _renderLoginForm('', '');
+  }
+
+  function _renderLoginForm(prefillEmail, prefillPwd) {
+    var savedCred = _loadCredentials();
+    var checked = !!(savedCred && savedCred.e);
     document.getElementById('main').innerHTML =
       '<div class="auth-screen">' +
         '<div class="auth-heart">&hearts;</div>' +
         '<h2 class="auth-title">恋爱日志</h2>' +
         '<p class="auth-subtitle">登录后双人共享，数据云端同步</p>' +
         '<div class="auth-form">' +
-          '<input id="authEmail" type="email" placeholder="邮箱">' +
-          '<input id="authPwd" type="password" placeholder="密码（至少 6 位）">' +
+          '<input id="authEmail" type="email" placeholder="邮箱" value="' + _escAttr(prefillEmail) + '">' +
+          '<input id="authPwd" type="password" placeholder="密码（至少 6 位）" value="' + _escAttr(prefillPwd) + '">' +
+          '<label class="auth-remember"><input type="checkbox" id="authRemember"' + (checked ? ' checked' : '') + '><span>记住密码</span></label>' +
           '<button class="btn-primary auth-btn" onclick="Auth.login()">登录</button>' +
           '<button class="btn-secondary auth-btn" onclick="Auth.register()">注册新账号</button>' +
           '<div class="auth-error" id="authError"></div>' +
         '</div>' +
       '</div>';
+  }
+
+  function _escAttr(s) {
+    if (!s) return '';
+    return s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  async function _autoLogin(email, pwd) {
+    var sb = Store.client();
+    if (!sb) { _renderLoginForm(email, ''); return; }
+    var result = await sb.auth.signInWithPassword({ email: email, password: pwd });
+    if (result.error) {
+      // 自动登录失败，清除过期凭据，回退到手动登录表单
+      _clearCredentials();
+      _renderLoginForm(email, '');
+      var el = document.getElementById('authError');
+      if (el) el.textContent = '自动登录失败，请重新输入密码';
+      return;
+    }
+    App.init();
   }
 
   function renderPairScreen() {
@@ -71,6 +138,13 @@ const Auth = (() => {
     var sb = Store.client();
     var result = await sb.auth.signInWithPassword({ email: email, password: pwd });
     if (result.error) { showError('登录失败：' + result.error.message); return; }
+    // 记住密码
+    var remember = document.getElementById('authRemember');
+    if (remember && remember.checked) {
+      _saveCredentials(email, pwd);
+    } else {
+      _clearCredentials();
+    }
     App.init();
   }
 
@@ -84,6 +158,11 @@ const Auth = (() => {
     var sb = Store.client();
     var result = await sb.auth.signUp({ email: email, password: pwd });
     if (result.error) { showError('注册失败：' + result.error.message); return; }
+    // 注册成功也保存凭据
+    var remember = document.getElementById('authRemember');
+    if (remember && remember.checked) {
+      _saveCredentials(email, pwd);
+    }
     App.init();
   }
 
@@ -113,6 +192,7 @@ const Auth = (() => {
     if (!confirm('确定退出登录？')) return;
     var sb = Store.client();
     Store.unsubscribe();
+    _clearCredentials();
     await sb.auth.signOut();
     renderAuthScreen();
   }

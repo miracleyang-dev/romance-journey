@@ -214,6 +214,72 @@ const Store = (() => {
     });
   }
 
+  /* ===== 变更检测（模块级快照） ===== */
+  const _SNAPSHOT_KEY = 'rj_data_snapshot';
+
+  /** 对每个模块生成一个简单的内容指纹（djb2 hash of JSON） */
+  function _simpleHash(str) {
+    var hash = 5381;
+    for (var i = 0; i < str.length; i++) {
+      hash = ((hash << 5) + hash) + str.charCodeAt(i);
+      hash = hash & hash; // 转 32 位整数
+    }
+    return hash;
+  }
+
+  function _moduleFingerprint(val) {
+    if (val === null || val === undefined) return '0';
+    var json = JSON.stringify(val);
+    return _simpleHash(json) + ':' + json.length;
+  }
+
+  function _buildSnapshot(data) {
+    var snap = {};
+    var keys = ['couple','milestones','dates','plans','memos','travels','series','photos','treaties','navConfig'];
+    for (var i = 0; i < keys.length; i++) {
+      snap[keys[i]] = _moduleFingerprint(data[keys[i]]);
+    }
+    return snap;
+  }
+
+  function saveSnapshot(data) {
+    try {
+      localStorage.setItem(_SNAPSHOT_KEY, JSON.stringify(_buildSnapshot(data)));
+    } catch (ex) { /* ignore */ }
+  }
+
+  /**
+   * 对比当前数据与上次本地快照，返回有变更的模块名列表。
+   * 首次使用（无快照）返回空数组。
+   */
+  function detectChanges(data) {
+    try {
+      var raw = localStorage.getItem(_SNAPSHOT_KEY);
+      if (!raw) return [];  // 首次使用，不弹窗
+      var oldSnap = JSON.parse(raw);
+      var newSnap = _buildSnapshot(data);
+      var changed = [];
+      var labelMap = {
+        couple: '恋爱信息',
+        milestones: '节点',
+        dates: '约会记录',
+        plans: '愿望瓶',
+        memos: '备忘',
+        travels: '旅行足迹',
+        series: '系列',
+        photos: '照片墙',
+        treaties: '恋爱条约',
+        navConfig: '导航布局'
+      };
+      for (var k in newSnap) {
+        if (oldSnap[k] !== newSnap[k]) {
+          changed.push(labelMap[k] || k);
+        }
+      }
+      return changed;
+    } catch (ex) { return []; }
+  }
+
   return {
     init: init, client: client, getUser: getUser,
     load: load, save: save,
@@ -222,6 +288,7 @@ const Store = (() => {
     uploadImage: uploadImage,
     nextId: nextId, compressImage: compressImage,
     exportJSON: exportJSON, importJSON: importJSON,
-    cloneDefault: cloneDefault, defaultData: defaultDataObj
+    cloneDefault: cloneDefault, defaultData: defaultDataObj,
+    saveSnapshot: saveSnapshot, detectChanges: detectChanges
   };
 })();

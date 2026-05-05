@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f7d6d0"/>
+      <stop offset="100%" stop-color="#f0b0a8"/>
+    </linearGradient>
+    <linearGradient id="heart" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#e8857e"/>
+      <stop offset="100%" stop-color="#d4726a"/>
+    </linearGradient>
+  </defs>
+  <!-- Rounded diary/book shape -->
+  <rect x="8" y="6" width="48" height="52" rx="6" ry="6" fill="url(#bg)" stroke="#d4726a" stroke-width="2"/>
+  <!-- Spine accent -->
+  <rect x="8" y="6" width="8" height="52" rx="3" ry="0" fill="#d4726a" opacity="0.25"/>
+  <!-- Diary lines -->
+  <line x1="22" y1="42" x2="48" y2="42" stroke="#d4a49e" stroke-width="1.5" stroke-linecap="round" opacity="0.5"/>
+  <line x1="22" y1="47" x2="42" y2="47" stroke="#d4a49e" stroke-width="1.5" stroke-linecap="round" opacity="0.5"/>
+  <!-- Heart centered on the diary -->
+  <path d="M32 40 C32 40 20 30 20 24 C20 19 24 16 28 16 C30.5 16 32 18 32 18 C32 18 33.5 16 36 16 C40 16 44 19 44 24 C44 30 32 40 32 40Z" fill="url(#heart)"/>
+</svg>

@@ -89,9 +89,20 @@ const App = (() => {
     if (!loaded) { Auth.renderAuthScreen(); return; }
     if (loaded._needPair) { Auth.renderPairScreen(); return; }
     data = loaded;
-    Store.subscribe(newData => { data = newData; renderNav(); render(); });
+
+    // 变更检测：与上次本地快照对比，提示对方修改了哪些模块
+    var changedModules = Store.detectChanges(data);
+    // 保存当前快照（无论是否有变更，都更新为最新状态）
+    Store.saveSnapshot(data);
+
+    Store.subscribe(newData => { data = newData; Store.saveSnapshot(data); renderNav(); render(); });
     renderNav();
     render();
+
+    // 有变更时延迟弹窗提示（等待 UI 渲染完成）
+    if (changedModules.length > 0) {
+      setTimeout(function() { _showChangeNotification(changedModules); }, 400);
+    }
   }
 
   function goTab(tab) {
@@ -584,7 +595,7 @@ const App = (() => {
         <div class="settings-item" onclick="App.editCouple()"><span class="settings-item__label">恋爱信息</span><span><span class="settings-item__value">${esc(nameText)}</span> <span class="settings-item__arrow">&rsaquo;</span></span></div>
       </div>
       <div class="settings-group">
-        <div class="settings-item" onclick="App.showInviteCode()"><span class="settings-item__label">邀请码（发给对方）</span><span class="settings-item__arrow">&rsaquo;</span></div>
+        <div class="settings-item" onclick="App.showInviteCode()"><span class="settings-item__label">邀请码</span><span class="settings-item__arrow">&rsaquo;</span></div>
       </div>
       <div class="settings-group">
         <div class="settings-item" onclick="App.editNavConfig()"><span class="settings-item__label">底部导航布局</span><span class="settings-item__arrow">&rsaquo;</span></div>
@@ -699,7 +710,27 @@ const App = (() => {
     data[key] = (data[key] || []).filter(i => i.id !== id);
     persist(); closeModal(); render();
   }
-  function persist() { Store.save(data); }
+  function persist() { Store.save(data); Store.saveSnapshot(data); }
+
+  /* ===== 变更提示弹窗 ===== */
+  function _showChangeNotification(modules) {
+    var listHtml = modules.map(function(m) {
+      return '<div style="display:flex;align-items:center;gap:.5rem;padding:.45rem .7rem;' +
+        'background:var(--surface2);border-radius:8px;font-size:.88rem">' +
+        '<span style="color:var(--accent);font-size:1rem">&#8226;</span>' +
+        '<span>' + m + '</span></div>';
+    }).join('');
+
+    showModal('内容更新提醒',
+      '<div style="padding:.5rem 0">' +
+        '<p style="font-size:.88rem;color:var(--text2);margin-bottom:.8rem;line-height:1.5">' +
+          '你不在的时候，对方更新了以下内容：</p>' +
+        '<div style="display:flex;flex-direction:column;gap:.4rem">' + listHtml + '</div>' +
+      '</div>' +
+      '<div class="modal__footer">' +
+        '<button class="btn-primary" onclick="App.closeModal()">知道了</button>' +
+      '</div>');
+  }
 
   async function handleImport(e) {
     const file = e.target.files[0]; if (!file) return;
