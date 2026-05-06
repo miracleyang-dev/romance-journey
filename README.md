@@ -13,6 +13,7 @@
 - 底部导航自定义布局
 - 数据导入 / 导出
 - 双人共享、实时同步、邀请码配对
+- PWA 配置（支持添加到桌面）
 
 ## 技术栈
 
@@ -28,6 +29,10 @@
 - js/store.js Supabase 持久化与同步
 - js/lunar.js 农历换算
 - js/config.js Supabase 配置
+- manifest.json PWA 清单配置
+- icons/icon-192.png 应用图标
+- icons/icon-512.png 应用图标
+- icons/apple-touch-icon.png iOS 桌面图标
 - Dockerfile Nginx 静态部署
 
 ## 本地运行
