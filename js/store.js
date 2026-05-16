@@ -255,6 +255,10 @@ const Store = (() => {
 
   function detectChanges(d) {
     try {
+      /* 存量历史数据无 _lastEditorId：无法判断最后编辑者，
+         安全跳过本次检测，避免虚假的"对方更新"通知。
+         待任一用户做首次真实编辑后 _lastEditorId 被写入，后续检测恢复正常。 */
+      if (!d._lastEditorId) return [];
       if (_userId && d._lastEditorId === _userId) return [];
       const raw = localStorage.getItem(SNAPSHOT_KEY);
       if (!raw) return [];

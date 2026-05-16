@@ -27,8 +27,8 @@ const App = (() => {
       icon:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>' },
     { key:'heartwords', label:'情书',     emoji:'&#128140;', title:'情书',
       icon:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>' },
-    { key:'questions',  label:'提问箱',   emoji:'&#10067;', title:'提问箱',
-      icon:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>' },
+    { key:'questions',  label:'提问箱',   emoji:'&#128172;', title:'提问箱',
+      icon:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M12 7v.01"/><path d="M12 14c0-2 1.5-2.5 1.5-4a1.5 1.5 0 1 0-3 0"/></svg>' },
   ];
 
   const DEFAULT_CONFIG = [
@@ -190,6 +190,19 @@ const App = (() => {
     if (nameA) html += `<option value="${esc(nameA)}" ${selectedValue === nameA ? 'selected' : ''}>${esc(nameA)}</option>`;
     if (nameB) html += `<option value="${esc(nameB)}" ${selectedValue === nameB ? 'selected' : ''}>${esc(nameB)}</option>`;
     return html;
+  }
+
+  function nameOptionsRequired(selectedValue) {
+    const nameA = data.couple.nameA || '', nameB = data.couple.nameB || '';
+    const sel = selectedValue || nameA;
+    let html = '';
+    if (nameA) html += `<option value="${esc(nameA)}" ${sel === nameA ? 'selected' : ''}>${esc(nameA)}</option>`;
+    if (nameB) html += `<option value="${esc(nameB)}" ${sel === nameB ? 'selected' : ''}>${esc(nameB)}</option>`;
+    return html;
+  }
+
+  function needNames() {
+    return !(data.couple.nameA && data.couple.nameB);
   }
 
   function actionBtns(editFn, delFn) {
@@ -652,18 +665,24 @@ const App = (() => {
         <div class="heartword-card__icon">&#128140;</div>
         <div class="heartword-card__body">
           <div class="heartword-card__content">${esc(i.content)}</div>
-          <div class="heartword-card__meta"><span class="heartword-card__author">${esc(i.author || '匿名')}</span><span class="heartword-card__date">${fmtDate(i.date)}</span></div>
+          <div class="heartword-card__meta">${i.author ? `<span class="heartword-card__author">${esc(i.author)}</span>` : ''}<span class="heartword-card__date">${fmtDate(i.date)}</span></div>
         </div>
         <div class="card__actions" style="position:static;margin-top:0;align-self:flex-start"><button onclick="App.editHeartword(${i.id})">编辑</button><button class="del" onclick="App.del('heartwords',${i.id})">删除</button></div>
       </div>`).join('');
   }
 
   function editHeartword(id) {
+    if (needNames()) {
+      showModal('请先设置称呼', `
+        <div style="text-align:center;padding:1rem 0"><p style="font-size:.9rem;color:var(--text2);line-height:1.6">写情书前，请先在设置中填写双方称呼</p></div>
+        <div class="modal__footer"><button class="btn-primary" onclick="App.closeModal();App.goTab('settings');App.editCouple()">前往设置</button></div>`);
+      return;
+    }
     const item = id ? (data.heartwords || []).find(i => i.id === id) : { content: '', date: todayISO(), author: '' };
     showModal(id ? '编辑情书' : '写情书', `
       <label>想对 TA 说的话</label>
       <textarea id="f_content" style="min-height:120px" placeholder="把心里话写在这里…">${esc(item.content)}</textarea>
-      <label>署名</label><select id="f_author">${nameOptions(item.author)}</select>
+      <label>署名</label><select id="f_author">${nameOptionsRequired(item.author)}</select>
       <label>日期</label><input type="date" id="f_date" value="${item.date}">
       <div class="modal__footer"><button class="btn-primary" onclick="App.saveHeartword(${id || 0})">保存</button></div>`);
   }
@@ -681,8 +700,8 @@ const App = (() => {
     return addBtn('提个问题', 'editQuestion()') + items.map(i => {
       const hasAnswer = !!(i.answer && i.answer.trim());
       return `<div class="question-card${hasAnswer ? ' answered' : ''}">
-        <div class="question-card__q"><div class="question-card__icon">&#10067;</div><div class="question-card__text">${esc(i.question)}</div></div>
-        <div class="question-card__meta"><span>${esc(i.asker || '匿名')} · ${fmtDate(i.date)}</span></div>
+        <div class="question-card__q"><div class="question-card__icon">&#128172;</div><div class="question-card__text">${esc(i.question)}</div></div>
+        <div class="question-card__meta"><span>${i.asker ? esc(i.asker) + ' · ' : ''}${fmtDate(i.date)}</span></div>
         ${hasAnswer ? `<div class="question-card__a"><div class="question-card__a-icon">&#128172;</div><div class="question-card__a-text">${esc(i.answer)}</div></div>` : `<div class="question-card__pending">等待回答…</div>`}
         <div class="card__actions" style="position:static;margin-top:.4rem;display:flex;gap:.3rem;justify-content:flex-end">
           <button onclick="App.answerQuestion(${i.id})">${hasAnswer ? '修改回答' : '回答'}</button>
@@ -694,11 +713,17 @@ const App = (() => {
   }
 
   function editQuestion(id) {
+    if (needNames()) {
+      showModal('请先设置称呼', `
+        <div style="text-align:center;padding:1rem 0"><p style="font-size:.9rem;color:var(--text2);line-height:1.6">提问前，请先在设置中填写双方称呼</p></div>
+        <div class="modal__footer"><button class="btn-primary" onclick="App.closeModal();App.goTab('settings');App.editCouple()">前往设置</button></div>`);
+      return;
+    }
     const item = id ? (data.questions || []).find(i => i.id === id) : { question: '', date: todayISO(), asker: '', answer: '' };
     showModal(id ? '编辑问题' : '提个问题', `
       <label>你的问题</label>
       <textarea id="f_question" style="min-height:80px" placeholder="写下想问对方的问题…">${esc(item.question)}</textarea>
-      <label>提问者</label><select id="f_asker">${nameOptions(item.asker, '匿名提问')}</select>
+      <label>提问者</label><select id="f_asker">${nameOptionsRequired(item.asker)}</select>
       <label>日期</label><input type="date" id="f_date" value="${item.date}">
       <div class="modal__footer"><button class="btn-primary" onclick="App.saveQuestion(${id || 0})">保存</button></div>`);
   }
