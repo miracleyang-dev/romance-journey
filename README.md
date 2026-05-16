@@ -9,31 +9,49 @@
 - 节点提醒（公历 / 农历）
 - 愿望瓶（短期 / 长期纸条）
 - 恋爱条约（支持子条约与拖拽排序）
+- 情书（写给对方的心里话，支持署名与日期）
+- 提问箱（向对方提问并等待真实回答）
 - 备忘清单、旅行足迹、系列合集
 - 底部导航自定义布局
-- 数据导入 / 导出
+- 数据导入 / 导出（支持叠加合并与整体覆盖）
 - 双人共享、实时同步、邀请码配对
+- 变更提醒（仅提示对方的修改，不提示自己的操作）
 - PWA 配置（支持添加到桌面）
 
 ## 技术栈
 
-- HTML + CSS + 原生 JavaScript
+- HTML + CSS + 原生 JavaScript（ES6+）
 - Supabase Auth / Database / Realtime / Storage
 
 ## 项目结构
 
-- index.html 入口与 UI 容器
-- css/style.css 样式与主题
-- js/app.js 应用主逻辑与渲染
-- js/auth.js 登录 / 注册 / 配对
-- js/store.js Supabase 持久化与同步
-- js/lunar.js 农历换算
-- js/config.js Supabase 配置
-- manifest.json PWA 清单配置
-- icons/icon-192.png 应用图标
-- icons/icon-512.png 应用图标
-- icons/apple-touch-icon.png iOS 桌面图标
-- Dockerfile Nginx 静态部署
+```
+index.html          入口与 UI 容器
+css/style.css       样式与主题
+js/app.js           应用主逻辑与渲染（模块注册、路由、CRUD、各板块渲染）
+js/auth.js          登录 / 注册 / 配对
+js/store.js         Supabase 持久化、实时同步、变更检测
+js/lunar.js         农历公历换算
+js/config.js        Supabase 连接配置
+manifest.json       PWA 清单
+Dockerfile          Nginx 静态部署
+```
+
+## 数据模块
+
+| 模块 key | 名称 | 说明 |
+|----------|------|------|
+| couple | 恋爱信息 | 关系确定日、双方称呼 |
+| dates | 约会 | 约会记录，支持单日和时间段 |
+| milestones | 节点 | 周期性纪念日提醒，支持农历 |
+| plans | 愿望 | 愿望瓶纸条，标记短期/长期、完成状态 |
+| treaties | 条约 | 恋爱条约，支持子条约与拖拽排序 |
+| memos | 备忘 | 自由文本备忘 |
+| travels | 旅行足迹 | 旅行打卡记录 |
+| series | 系列 | 自定义合集（电影、美食等） |
+| heartwords | 情书 | 写给对方的心里话 |
+| questions | 提问箱 | 向对方提问，等待回答 |
+| photos | 照片墙 | 首页照片展示 |
 
 ## 本地运行
 
@@ -59,26 +77,12 @@
 
 ## Docker 部署
 
-项目包含 Nginx 镜像构建文件：
-
 ```bash
 docker build -t romance-journey .
 docker run --rm -p 8080:80 romance-journey
 ```
 
 浏览器访问 http://localhost:8080
-
-## 开发建议
-
-- 交互逻辑集中在 [js/app.js](js/app.js)
-- 登录 / 配对逻辑在 [js/auth.js](js/auth.js)
-- 数据存储与同步在 [js/store.js](js/store.js)
-- 农历相关计算在 [js/lunar.js](js/lunar.js)
-
-## 注意事项
-
-- 这是纯静态项目，适合部署在 GitHub Pages、Netlify、Vercel 等平台
-- 浏览器缓存可能影响更新，必要时请强制刷新
 
 ## 许可证
 

@@ -1,14 +1,12 @@
-/**
- * store.js — Supabase 云端持久化层
- */
 const Store = (() => {
   let sb = null;
   let coupleId = null;
   let channel = null;
   let _initialized = false;
   let _lastSaveTime = 0;
+  let _userId = null;
 
-  const defaultDataObj = {
+  const DEFAULT_DATA = {
     couple: { startDate: '', nameA: '', nameB: '' },
     milestones: [],
     dates: [],
@@ -18,10 +16,22 @@ const Store = (() => {
     series: [],
     photos: [],
     treaties: [],
+    heartwords: [],
+    questions: [],
     navConfig: null
   };
 
+  const MODULE_LABELS = {
+    couple: '恋爱信息', milestones: '节点', dates: '约会记录',
+    plans: '愿望瓶', memos: '备忘', travels: '旅行足迹',
+    series: '系列', photos: '照片墙', treaties: '恋爱条约',
+    heartwords: '情书', questions: '提问箱', navConfig: '导航布局'
+  };
+
+  const SNAPSHOT_KEY = 'rj_data_snapshot';
+
   /* ===== 初始化 ===== */
+
   function init() {
     if (_initialized) return;
     const url = window.__SUPABASE_URL__;
@@ -35,6 +45,7 @@ const Store = (() => {
   function client() { return sb; }
 
   /* ===== 用户 & 配对 ===== */
+
   async function getUser() {
     if (!sb) return null;
     const { data: { user } } = await sb.auth.getUser();
@@ -43,9 +54,7 @@ const Store = (() => {
 
   async function findCoupleId(userId) {
     const { data } = await sb.from('couple_members')
-      .select('couple_id')
-      .eq('user_id', userId)
-      .maybeSingle();
+      .select('couple_id').eq('user_id', userId).maybeSingle();
     return data?.couple_id || null;
   }
 
@@ -53,9 +62,7 @@ const Store = (() => {
     const user = await getUser();
     if (!user) return null;
     const { data: couple, error } = await sb.from('couples')
-      .insert({ data: cloneDefault() })
-      .select()
-      .single();
+      .insert({ data: cloneDefault() }).select().single();
     if (error) { console.error('createCouple', error); return null; }
     await sb.from('couple_members')
       .insert({ couple_id: couple.id, user_id: user.id });
@@ -82,52 +89,48 @@ const Store = (() => {
   async function getInviteCode() {
     if (!sb || !coupleId) return '';
     const { data } = await sb.from('couples')
-      .select('invite_code')
-      .eq('id', coupleId)
-      .single();
+      .select('invite_code').eq('id', coupleId).single();
     return data?.invite_code || '';
   }
 
-  /* ===== 数据加载 ===== */
+  /* ===== 数据读写 ===== */
+
   async function load() {
     init();
     if (!sb) return cloneDefault();
     const user = await getUser();
-    if (!user) return null;                    // 未登录
+    if (!user) return null;
+    _userId = user.id;
     coupleId = await findCoupleId(user.id);
-    if (!coupleId) return { _needPair: true };  // 已登录但未配对
+    if (!coupleId) return { _needPair: true };
     const { data: row, error } = await sb.from('couples')
-      .select('data')
-      .eq('id', coupleId)
-      .single();
+      .select('data').eq('id', coupleId).single();
     if (error || !row) return cloneDefault();
     return normalizeData(row.data || {});
   }
 
-  /* ===== 数据保存 ===== */
-  async function save(data) {
+  async function save(d) {
     if (!sb || !coupleId) return;
     _lastSaveTime = Date.now();
-    const clean = Object.assign({}, data);
+    const clean = Object.assign({}, d);
     delete clean._needPair;
+    if (_userId) clean._lastEditorId = _userId;
     await sb.from('couples')
       .update({ data: clean, updated_at: new Date().toISOString() })
       .eq('id', coupleId);
   }
 
   /* ===== 实时同步 ===== */
+
   function subscribe(onChange) {
     if (!sb || !coupleId) return;
     channel = sb.channel('couple-sync')
       .on('postgres_changes', {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'couples',
+        event: 'UPDATE', schema: 'public', table: 'couples',
         filter: 'id=eq.' + coupleId
-      }, function(payload) {
-        // 忽略自己刚保存后 2 秒内的回声
+      }, (payload) => {
         if (Date.now() - _lastSaveTime < 2000) return;
-        var d = payload.new && payload.new.data;
+        const d = payload.new && payload.new.data;
         if (d) onChange(normalizeData(d));
       })
       .subscribe();
@@ -138,74 +141,52 @@ const Store = (() => {
   }
 
   /* ===== 图片上传 ===== */
+
   async function uploadImage(file) {
-    var compressed = await compressImage(file);
+    const compressed = await _compressImage(file);
     if (!sb || !coupleId) return compressed;
-    var blob = dataURLtoBlob(compressed);
-    var path = coupleId + '/' + Date.now() + '.jpg';
-    var result = await sb.storage.from('photos')
+    const blob = _dataURLtoBlob(compressed);
+    const path = coupleId + '/' + Date.now() + '.jpg';
+    const result = await sb.storage.from('photos')
       .upload(path, blob, { contentType: 'image/jpeg' });
     if (result.error) { console.warn('图片上传失败', result.error); return compressed; }
-    var pub = sb.storage.from('photos').getPublicUrl(path);
-    return pub.data.publicUrl;
+    return sb.storage.from('photos').getPublicUrl(path).data.publicUrl;
   }
 
-  /* ===== 工具函数 ===== */
-  function cloneDefault() { return JSON.parse(JSON.stringify(defaultDataObj)); }
+  /* ===== 数据工具 ===== */
+
+  function cloneDefault() { return JSON.parse(JSON.stringify(DEFAULT_DATA)); }
 
   function normalizeData(d) {
     if (!d || typeof d !== 'object') return cloneDefault();
-    for (var k in defaultDataObj) {
+    for (const k in DEFAULT_DATA) {
       if (!(k in d)) {
-        d[k] = Array.isArray(defaultDataObj[k]) ? [] :
-          (typeof defaultDataObj[k] === 'object' && !Array.isArray(defaultDataObj[k]) ? {} : '');
+        const def = DEFAULT_DATA[k];
+        d[k] = Array.isArray(def) ? [] : (typeof def === 'object' && def !== null ? {} : def);
       }
     }
     return d;
   }
 
   function nextId(arr) {
-    return (!arr || !arr.length) ? 1 : Math.max.apply(null, arr.map(function(i) { return i.id || 0; })) + 1;
+    if (!arr || !arr.length) return 1;
+    return Math.max(...arr.map(i => i.id || 0)) + 1;
   }
 
-  function compressImage(file, maxW) {
-    maxW = maxW || 600;
-    return new Promise(function(resolve) {
-      var img = new Image();
-      img.onload = function() {
-        var c = document.createElement('canvas');
-        var w = img.width, h = img.height;
-        if (w > maxW) { h = h * maxW / w; w = maxW; }
-        c.width = w; c.height = h;
-        c.getContext('2d').drawImage(img, 0, 0, w, h);
-        resolve(c.toDataURL('image/jpeg', 0.7));
-      };
-      img.src = URL.createObjectURL(file);
-    });
-  }
-
-  function dataURLtoBlob(dataURL) {
-    var parts = dataURL.split(',');
-    var mime = parts[0].match(/:(.*?);/)[1];
-    var bin = atob(parts[1]);
-    var arr = new Uint8Array(bin.length);
-    for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-    return new Blob([arr], { type: mime });
-  }
-
-  function exportJSON(data) {
-    var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    var a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
+  function exportJSON(d) {
+    const blob = new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    a.href = url;
     a.download = 'data.json';
     a.click();
-    URL.revokeObjectURL(a.href);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   function importJSON(file) {
-    return new Promise(function(resolve, reject) {
-      var reader = new FileReader();
-      reader.onload = function(e) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
         try { resolve(JSON.parse(e.target.result)); }
         catch (err) { reject(err); }
       };
@@ -214,81 +195,90 @@ const Store = (() => {
     });
   }
 
-  /* ===== 变更检测（模块级快照） ===== */
-  const _SNAPSHOT_KEY = 'rj_data_snapshot';
+  /* ===== 内部工具 ===== */
 
-  /** 对每个模块生成一个简单的内容指纹（djb2 hash of JSON） */
-  function _simpleHash(str) {
-    var hash = 5381;
-    for (var i = 0; i < str.length; i++) {
+  function _compressImage(file, maxW = 600) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      const objUrl = URL.createObjectURL(file);
+      img.onload = () => {
+        let w = img.width, h = img.height;
+        if (w > maxW) { h = h * maxW / w; w = maxW; }
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        URL.revokeObjectURL(objUrl);
+        resolve(c.toDataURL('image/jpeg', 0.7));
+      };
+      img.src = objUrl;
+    });
+  }
+
+  function _dataURLtoBlob(dataURL) {
+    const parts = dataURL.split(',');
+    const mime = parts[0].match(/:(.*?);/)[1];
+    const bin = atob(parts[1]);
+    const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    return new Blob([arr], { type: mime });
+  }
+
+  /* ===== 变更检测 ===== */
+
+  function _djb2(str) {
+    let hash = 5381;
+    for (let i = 0; i < str.length; i++) {
       hash = ((hash << 5) + hash) + str.charCodeAt(i);
-      hash = hash & hash; // 转 32 位整数
+      hash = hash & hash;
     }
     return hash;
   }
 
-  function _moduleFingerprint(val) {
-    if (val === null || val === undefined) return '0';
-    var json = JSON.stringify(val);
-    return _simpleHash(json) + ':' + json.length;
+  function _fingerprint(val) {
+    if (val == null) return '0';
+    const json = JSON.stringify(val);
+    return _djb2(json) + ':' + json.length;
   }
 
-  function _buildSnapshot(data) {
-    var snap = {};
-    var keys = ['couple','milestones','dates','plans','memos','travels','series','photos','treaties','navConfig'];
-    for (var i = 0; i < keys.length; i++) {
-      snap[keys[i]] = _moduleFingerprint(data[keys[i]]);
+  function _buildSnapshot(d) {
+    const snap = {};
+    for (const k in DEFAULT_DATA) {
+      snap[k] = _fingerprint(d[k]);
     }
     return snap;
   }
 
-  function saveSnapshot(data) {
-    try {
-      localStorage.setItem(_SNAPSHOT_KEY, JSON.stringify(_buildSnapshot(data)));
-    } catch (ex) { /* ignore */ }
+  function saveSnapshot(d) {
+    try { localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(_buildSnapshot(d))); }
+    catch (_) {}
   }
 
-  /**
-   * 对比当前数据与上次本地快照，返回有变更的模块名列表。
-   * 首次使用（无快照）返回空数组。
-   */
-  function detectChanges(data) {
+  function detectChanges(d) {
     try {
-      var raw = localStorage.getItem(_SNAPSHOT_KEY);
-      if (!raw) return [];  // 首次使用，不弹窗
-      var oldSnap = JSON.parse(raw);
-      var newSnap = _buildSnapshot(data);
-      var changed = [];
-      var labelMap = {
-        couple: '恋爱信息',
-        milestones: '节点',
-        dates: '约会记录',
-        plans: '愿望瓶',
-        memos: '备忘',
-        travels: '旅行足迹',
-        series: '系列',
-        photos: '照片墙',
-        treaties: '恋爱条约',
-        navConfig: '导航布局'
-      };
-      for (var k in newSnap) {
-        if (oldSnap[k] !== newSnap[k]) {
-          changed.push(labelMap[k] || k);
-        }
+      if (_userId && d._lastEditorId === _userId) return [];
+      const raw = localStorage.getItem(SNAPSHOT_KEY);
+      if (!raw) return [];
+      const oldSnap = JSON.parse(raw);
+      const newSnap = _buildSnapshot(d);
+      const changed = [];
+      for (const k in newSnap) {
+        if (oldSnap[k] !== newSnap[k]) changed.push(MODULE_LABELS[k] || k);
       }
       return changed;
-    } catch (ex) { return []; }
+    } catch (_) { return []; }
   }
 
+  /* ===== 公共接口 ===== */
+
   return {
-    init: init, client: client, getUser: getUser,
-    load: load, save: save,
-    subscribe: subscribe, unsubscribe: unsubscribe,
-    createCouple: createCouple, joinCouple: joinCouple, getInviteCode: getInviteCode,
-    uploadImage: uploadImage,
-    nextId: nextId, compressImage: compressImage,
-    exportJSON: exportJSON, importJSON: importJSON,
-    cloneDefault: cloneDefault, defaultData: defaultDataObj,
-    saveSnapshot: saveSnapshot, detectChanges: detectChanges
+    init, client, getUser,
+    getUserId: () => _userId,
+    load, save,
+    subscribe, unsubscribe,
+    createCouple, joinCouple, getInviteCode,
+    uploadImage, nextId,
+    exportJSON, importJSON,
+    cloneDefault, defaultData: DEFAULT_DATA,
+    saveSnapshot, detectChanges
   };
 })();
