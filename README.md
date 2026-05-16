@@ -34,6 +34,7 @@ js/store.js         Supabase 持久化、实时同步、变更检测
 js/lunar.js         农历公历换算
 js/config.js        Supabase 连接配置
 manifest.json       PWA 清单
+nginx.conf          Nginx 站点配置（含 fallback 到 index.html）
 Dockerfile          Nginx 静态部署
 ```
 
