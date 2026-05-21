@@ -73,8 +73,55 @@ Dockerfile          Nginx 静态部署
 
 - 表 `couples`（字段至少包含 `id`, `data`, `invite_code`, `updated_at`）
 - 表 `couple_members`（字段至少包含 `couple_id`, `user_id`）
-- RPC 函数 `lookup_couple_by_invite`（通过邀请码查询 `couple_id`）
+- RPC 函数 `lookup_couple_by_invite`（通过邀请码查询 `couple_id`，SECURITY DEFINER 模式）
 - Storage bucket `photos`（用于上传照片墙图片）
+
+### 安全策略（RLS）
+
+本项目为纯前端应用，所有数据库操作通过 Supabase anon key 在客户端执行，因此必须正确配置 Row Level Security（行级安全）。
+
+**两张表均需开启 RLS：**
+
+```sql
+ALTER TABLE public.couples ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.couple_members ENABLE ROW LEVEL SECURITY;
+```
+
+**couples 表策略：**
+
+| 策略名 | 操作 | 规则 |
+|--------|------|------|
+| members_select_own_couple | SELECT | 仅成员可查看自己的空间 |
+| members_update_own_couple | UPDATE | 仅成员可修改自己的空间 |
+| authenticated_insert_couple | INSERT | 已登录用户可创建空间 |
+
+**couple_members 表策略：**
+
+| 策略名 | 操作 | 规则 |
+|--------|------|------|
+| users_select_own_membership | SELECT | 用户只能查看自己的成员记录 |
+| users_insert_own_membership | INSERT | 用户只能以自己的身份加入 |
+
+> 所有策略的目标角色应为 `authenticated`，不要使用 `public`。
+
+**函数权限：**
+
+`lookup_couple_by_invite` 使用 SECURITY DEFINER 模式（绕过 RLS 查询邀请码），需收紧调用权限：
+
+```sql
+REVOKE EXECUTE ON FUNCTION public.lookup_couple_by_invite(text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.lookup_couple_by_invite(text) FROM public;
+GRANT EXECUTE ON FUNCTION public.lookup_couple_by_invite(text) TO authenticated;
+```
+
+**Storage 策略（photos 桶）：**
+
+| 策略名 | 操作 | 规则 |
+|--------|------|------|
+| Authenticated users can upload photos | INSERT | 已登录用户可上传 |
+| Authenticated users can view photos | SELECT | 已登录用户可查看 |
+
+> 不要使用 `Anyone can view photos` 等允许匿名访问的策略。
 
 ## Docker 部署
 
