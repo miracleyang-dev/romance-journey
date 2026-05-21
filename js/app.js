@@ -779,7 +779,7 @@ const App = (() => {
     persist(); closeModal(); render();
   }
 
-  /* ===== SUGGESTIONS (默契贴) ===== */
+  /* ===== SUGGESTIONS (建议箱) ===== */
 
   function renderSuggestions() {
     const items = (data.suggestions || []).slice().sort((a, b) => b.id - a.id);
