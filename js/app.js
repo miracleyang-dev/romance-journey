@@ -29,6 +29,8 @@ const App = (() => {
       icon:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>' },
     { key:'questions',  label:'提问箱',   emoji:'&#128172;', title:'提问箱',
       icon:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M12 7v.01"/><path d="M12 14c0-2 1.5-2.5 1.5-4a1.5 1.5 0 1 0-3 0"/></svg>' },
+    { key:'suggestions', label:'默契贴', emoji:'&#128161;', title:'默契贴',
+      icon:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a1 1 0 0 1-1 1h-6a1 1 0 0 1-1-1v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z"/></svg>' },
   ];
 
   const DEFAULT_CONFIG = [
@@ -37,6 +39,7 @@ const App = (() => {
     { key:'treaty', nav:false }, { key:'memo', nav:false },
     { key:'travel', nav:false }, { key:'series', nav:false },
     { key:'heartwords', nav:false }, { key:'questions', nav:false },
+    { key:'suggestions', nav:false },
   ];
 
   const MORE_TAB = { key:'more', label:'更多', icon:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>' };
@@ -45,7 +48,8 @@ const App = (() => {
     home: renderHome, dates: renderDates, milestones: renderMilestones,
     plans: renderPlans, treaty: renderTreaty, memo: renderMemo,
     travel: renderTravel, series: renderSeries, heartwords: renderHeartwords,
-    questions: renderQuestions, more: renderMore, settings: renderSettings,
+    questions: renderQuestions, suggestions: renderSuggestions,
+    more: renderMore, settings: renderSettings,
   };
 
   /* ===== 导航配置 ===== */
@@ -661,14 +665,24 @@ const App = (() => {
   function renderHeartwords() {
     const items = (data.heartwords || []).slice().sort((a, b) => b.id - a.id);
     if (!items.length) return empty('写下想对 TA 说的心里话，让文字传递真心') + addBtn('写情书', 'editHeartword()');
-    return addBtn('写情书', 'editHeartword()') + items.map(i => `<div class="heartword-card">
-        <div class="heartword-card__icon">&#128140;</div>
-        <div class="heartword-card__body">
-          <div class="heartword-card__content">${esc(i.content)}</div>
-          <div class="heartword-card__meta">${i.author ? `<span class="heartword-card__author">${esc(i.author)}</span>` : ''}<span class="heartword-card__date">${fmtDate(i.date)}</span></div>
+    return addBtn('写情书', 'editHeartword()') + `<div class="preview-list">${items.map(i => `<div class="preview-card preview-card--heartword" onclick="App.viewHeartword(${i.id})">
+        <div class="preview-card__icon">&#128140;</div>
+        <div class="preview-card__body">
+          <div class="preview-card__text">${esc(i.content)}</div>
+          <div class="preview-card__meta">${i.author ? `<span class="preview-card__author">${esc(i.author)}</span>` : ''}<span>${fmtDate(i.date)}</span></div>
         </div>
-        <div class="card__actions" style="position:static;margin-top:0;align-self:flex-start"><button onclick="App.editHeartword(${i.id})">编辑</button><button class="del" onclick="App.del('heartwords',${i.id})">删除</button></div>
-      </div>`).join('');
+        <span class="preview-card__arrow">&rsaquo;</span>
+      </div>`).join('')}</div>`;
+  }
+
+  function viewHeartword(id) {
+    const i = (data.heartwords || []).find(x => x.id === id); if (!i) return;
+    showModal('情书', `
+      <div class="detail-view">
+        <div class="detail-view__content">${esc(i.content)}</div>
+        <div class="detail-view__meta">${i.author ? `<span style="color:var(--accent);font-weight:600">${esc(i.author)}</span> · ` : ''}${fmtDate(i.date)}</div>
+      </div>
+      <div class="modal__footer"><button class="btn-secondary" onclick="App.closeModal();App.editHeartword(${i.id})">编辑</button><button class="btn-secondary" style="color:#c0392b" onclick="App.del('heartwords',${i.id})">删除</button></div>`);
   }
 
   function editHeartword(id) {
@@ -697,19 +711,34 @@ const App = (() => {
   function renderQuestions() {
     const items = (data.questions || []).slice().sort((a, b) => b.id - a.id);
     if (!items.length) return empty('写下想问对方的问题，期待 TA 的真实回答') + addBtn('提个问题', 'editQuestion()');
-    return addBtn('提个问题', 'editQuestion()') + items.map(i => {
+    return addBtn('提个问题', 'editQuestion()') + `<div class="preview-list">${items.map(i => {
       const hasAnswer = !!(i.answer && i.answer.trim());
-      return `<div class="question-card${hasAnswer ? ' answered' : ''}">
-        <div class="question-card__q"><div class="question-card__icon">&#128172;</div><div class="question-card__text">${esc(i.question)}</div></div>
-        <div class="question-card__meta"><span>${i.asker ? esc(i.asker) + ' · ' : ''}${fmtDate(i.date)}</span></div>
-        ${hasAnswer ? `<div class="question-card__a"><div class="question-card__a-icon">&#128172;</div><div class="question-card__a-text">${esc(i.answer)}</div></div>` : `<div class="question-card__pending">等待回答…</div>`}
-        <div class="card__actions" style="position:static;margin-top:.4rem;display:flex;gap:.3rem;justify-content:flex-end">
-          <button onclick="App.answerQuestion(${i.id})">${hasAnswer ? '修改回答' : '回答'}</button>
-          <button onclick="App.editQuestion(${i.id})">编辑问题</button>
-          <button class="del" onclick="App.del('questions',${i.id})">删除</button>
+      return `<div class="preview-card preview-card--question ${hasAnswer ? 'answered' : ''}" onclick="App.viewQuestion(${i.id})">
+        <div class="preview-card__icon">${hasAnswer ? '&#9989;' : '&#128172;'}</div>
+        <div class="preview-card__body">
+          <div class="preview-card__text">${esc(i.question)}</div>
+          <div class="preview-card__meta"><span>${i.asker ? esc(i.asker) + ' · ' : ''}${fmtDate(i.date)}</span><span class="preview-card__status ${hasAnswer ? 'green' : ''}">${hasAnswer ? '已回答' : '等待回答'}</span></div>
         </div>
+        <span class="preview-card__arrow">&rsaquo;</span>
       </div>`;
-    }).join('');
+    }).join('')}</div>`;
+  }
+
+  function viewQuestion(id) {
+    const i = (data.questions || []).find(x => x.id === id); if (!i) return;
+    const hasAnswer = !!(i.answer && i.answer.trim());
+    showModal('提问详情', `
+      <div class="detail-view">
+        <div class="detail-view__label">问题</div>
+        <div class="detail-view__content">${esc(i.question)}</div>
+        <div class="detail-view__meta">${i.asker ? esc(i.asker) + ' · ' : ''}${fmtDate(i.date)}</div>
+        ${hasAnswer ? `<div class="detail-view__label" style="margin-top:.8rem">回答</div><div class="detail-view__answer">${esc(i.answer)}</div>` : `<div style="margin-top:.8rem;color:var(--text3);font-style:italic">等待回答…</div>`}
+      </div>
+      <div class="modal__footer">
+        <button class="btn-secondary" onclick="App.closeModal();App.answerQuestion(${i.id})">${hasAnswer ? '修改回答' : '回答'}</button>
+        <button class="btn-secondary" onclick="App.closeModal();App.editQuestion(${i.id})">编辑问题</button>
+        <button class="btn-secondary" style="color:#c0392b" onclick="App.del('questions',${i.id})">删除</button>
+      </div>`);
   }
 
   function editQuestion(id) {
@@ -747,6 +776,124 @@ const App = (() => {
   function saveAnswer(id) {
     const item = (data.questions || []).find(i => i.id === id); if (!item) return;
     item.answer = rawV('f_answer');
+    persist(); closeModal(); render();
+  }
+
+  /* ===== SUGGESTIONS (默契贴) ===== */
+
+  function renderSuggestions() {
+    const items = (data.suggestions || []).slice().sort((a, b) => b.id - a.id);
+    if (!items.length) return empty('写下给对方的相处建议，一起变得更默契') + addBtn('写建议', 'editSuggestion()');
+    return addBtn('写建议', 'editSuggestion()') + `<div class="preview-list">${items.map(i => {
+      const st = i.response ? 'responded' : (i.read ? 'read' : 'unread');
+      const stLabel = i.response ? '已回应' : (i.read ? '已读' : '未读');
+      const stClass = i.response ? 'green' : (i.read ? 'blue' : '');
+      return `<div class="preview-card preview-card--suggestion ${st}" onclick="App.viewSuggestion(${i.id})">
+        <div class="preview-card__icon">${i.response ? '&#9989;' : (i.read ? '&#128065;' : '&#128161;')}</div>
+        <div class="preview-card__body">
+          <div class="preview-card__text">${esc(i.content)}</div>
+          <div class="preview-card__meta">
+            <span>${esc(i.from)} &#10132; ${esc(i.to)} · ${fmtDate(i.date)}</span>
+            <span class="preview-card__status ${stClass}">${stLabel}</span>
+          </div>
+        </div>
+        <span class="preview-card__arrow">&rsaquo;</span>
+      </div>`;
+    }).join('')}</div>`;
+  }
+
+  function viewSuggestion(id) {
+    const i = (data.suggestions || []).find(x => x.id === id); if (!i) return;
+    const st = i.response ? '已回应' : (i.read ? '已读' : '未读');
+    let html = `<div class="detail-view">
+      <div class="detail-view__label">建议内容</div>
+      <div class="detail-view__content">${esc(i.content)}</div>
+      <div class="detail-view__meta">${esc(i.from)} &#10132; ${esc(i.to)} · ${fmtDate(i.date)}</div>`;
+    if (i.read) {
+      html += `<div class="detail-view__badge green">&#128065; 已读 · ${fmtDate(i.readDate)}</div>`;
+    }
+    if (i.response) {
+      html += `<div class="detail-view__label" style="margin-top:.8rem">回应</div><div class="detail-view__answer">${esc(i.response)}</div><div style="font-size:.75rem;color:var(--text3);margin-top:.2rem">${fmtDate(i.responseDate)}</div>`;
+    }
+    html += `</div><div class="modal__footer">`;
+    if (!i.read) html += `<button class="btn-primary" onclick="App.markSuggestionRead(${i.id})">确认已读</button>`;
+    if (!i.response) html += `<button class="btn-secondary" onclick="App.closeModal();App.respondSuggestion(${i.id})">写回应</button>`;
+    else html += `<button class="btn-secondary" onclick="App.closeModal();App.respondSuggestion(${i.id})">修改回应</button>`;
+    html += `<button class="btn-secondary" onclick="App.closeModal();App.editSuggestion(${i.id})">编辑</button>`;
+    html += `<button class="btn-secondary" style="color:#c0392b" onclick="App.del('suggestions',${i.id})">删除</button></div>`;
+    showModal('建议详情', html);
+  }
+
+  function editSuggestion(id) {
+    if (needNames()) {
+      showModal('请先设置称呼', `
+        <div style="text-align:center;padding:1rem 0"><p style="font-size:.9rem;color:var(--text2);line-height:1.6">写建议前，请先在设置中填写双方称呼</p></div>
+        <div class="modal__footer"><button class="btn-primary" onclick="App.closeModal();App.goTab('settings');App.editCouple()">前往设置</button></div>`);
+      return;
+    }
+    const item = id ? (data.suggestions || []).find(i => i.id === id) : { content: '', date: todayISO(), from: '', to: '' };
+    const nameA = data.couple.nameA || '', nameB = data.couple.nameB || '';
+    const fromVal = item.from || nameA;
+    const toVal = item.to || nameB;
+    showModal(id ? '编辑建议' : '写建议', `
+      <label>建议内容</label>
+      <textarea id="f_content" style="min-height:100px" placeholder="写下你对 TA 的相处建议…">${esc(item.content)}</textarea>
+      <label>提出者</label><select id="f_from" onchange="App.syncSuggestionTo()">
+        <option value="${esc(nameA)}" ${fromVal === nameA ? 'selected' : ''}>${esc(nameA)}</option>
+        ${nameB ? `<option value="${esc(nameB)}" ${fromVal === nameB ? 'selected' : ''}>${esc(nameB)}</option>` : ''}
+      </select>
+      <label>给</label><select id="f_to">
+        ${nameB ? `<option value="${esc(nameB)}" ${toVal === nameB ? 'selected' : ''}>${esc(nameB)}</option>` : ''}
+        <option value="${esc(nameA)}" ${toVal === nameA ? 'selected' : ''}>${esc(nameA)}</option>
+      </select>
+      <label>日期</label><input type="date" id="f_date" value="${item.date}">
+      <div class="modal__footer"><button class="btn-primary" onclick="App.saveSuggestion(${id || 0})">保存</button></div>`);
+  }
+
+  function syncSuggestionTo() {
+    const nameA = data.couple.nameA || '', nameB = data.couple.nameB || '';
+    const fromEl = document.getElementById('f_from');
+    const toEl = document.getElementById('f_to');
+    if (!fromEl || !toEl) return;
+    toEl.value = (fromEl.value === nameA) ? nameB : nameA;
+  }
+
+  function saveSuggestion(id) {
+    const fields = { content: rawV('f_content'), date: v('f_date'), from: v('f_from'), to: v('f_to') };
+    if (id) {
+      const old = (data.suggestions || []).find(i => i.id === id);
+      fields.read = old ? old.read : false;
+      fields.readDate = old ? old.readDate : '';
+      fields.response = old ? old.response : '';
+      fields.responseDate = old ? old.responseDate : '';
+    } else {
+      fields.read = false; fields.readDate = '';
+      fields.response = ''; fields.responseDate = '';
+    }
+    saveItem('suggestions', id, fields); closeModal(); render();
+  }
+
+  function markSuggestionRead(id) {
+    const item = (data.suggestions || []).find(i => i.id === id); if (!item) return;
+    item.read = true;
+    item.readDate = todayISO();
+    persist(); closeModal(); render();
+  }
+
+  function respondSuggestion(id) {
+    const item = (data.suggestions || []).find(i => i.id === id); if (!item) return;
+    if (!item.read) { item.read = true; item.readDate = todayISO(); }
+    showModal('回应建议', `
+      <div style="font-size:.9rem;color:var(--text2);padding:.6rem;background:var(--surface2);border-radius:8px;margin-bottom:.6rem"><strong>${esc(item.from)} 说：</strong>${esc(item.content)}</div>
+      <label>你的回应</label>
+      <textarea id="f_response" style="min-height:100px" placeholder="写下你的想法…">${esc(item.response || '')}</textarea>
+      <div class="modal__footer"><button class="btn-primary" onclick="App.saveResponse(${id})">保存回应</button></div>`);
+  }
+
+  function saveResponse(id) {
+    const item = (data.suggestions || []).find(i => i.id === id); if (!item) return;
+    item.response = rawV('f_response');
+    item.responseDate = todayISO();
     persist(); closeModal(); render();
   }
 
@@ -856,7 +1003,7 @@ const App = (() => {
       }
     }
     if (imported.navConfig) data.navConfig = imported.navConfig;
-    const arrKeys = ['milestones', 'dates', 'plans', 'memos', 'travels', 'treaties', 'photos', 'heartwords', 'questions'];
+    const arrKeys = ['milestones', 'dates', 'plans', 'memos', 'travels', 'treaties', 'photos', 'heartwords', 'questions', 'suggestions'];
     for (const key of arrKeys) {
       if (!Array.isArray(imported[key])) continue;
       if (!data[key]) data[key] = [];
@@ -897,8 +1044,10 @@ const App = (() => {
     editTravel, saveTravel,
     editSeriesTitle, saveSeriesTitle, delSeries,
     editSeriesItem, saveSeriesItem, delSeriesItem,
-    editHeartword, saveHeartword,
-    editQuestion, saveQuestion, answerQuestion, saveAnswer,
+    editHeartword, saveHeartword, viewHeartword,
+    editQuestion, saveQuestion, answerQuestion, saveAnswer, viewQuestion,
+    editSuggestion, saveSuggestion, viewSuggestion, markSuggestionRead,
+    respondSuggestion, saveResponse, syncSuggestionTo,
     editCouple, saveCouple, showInviteCode,
     editNavConfig, navToggle, navMove, saveNavConfig, resetNavConfig,
     del, handleImport, clearData
