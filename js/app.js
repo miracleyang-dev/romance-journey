@@ -29,8 +29,8 @@ const App = (() => {
       icon:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>' },
     { key:'questions',  label:'提问箱',   emoji:'&#128172;', title:'提问箱',
       icon:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M12 7v.01"/><path d="M12 14c0-2 1.5-2.5 1.5-4a1.5 1.5 0 1 0-3 0"/></svg>' },
-    { key:'suggestions', label:'默契贴', emoji:'&#128161;', title:'默契贴',
-      icon:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a1 1 0 0 1-1 1h-6a1 1 0 0 1-1-1v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z"/></svg>' },
+    { key:'suggestions', label:'建议箱', emoji:'&#128230;', title:'建议箱',
+      icon:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v8"/><path d="M8 7l4 4 4-4"/></svg>' },
   ];
 
   const DEFAULT_CONFIG = [
@@ -532,7 +532,7 @@ const App = (() => {
 
   function renderMemo() {
     const items = (data.memos || []).slice().sort((a, b) => b.id - a.id);
-    if (!items.length) return empty('记录银行卡号、对方喜好、家务分工、重要密码提示……') + addBtn('添加备忘', 'editMemo()');
+    if (!items.length) return empty('对方的喜好、家里的密码、重要的事都放这') + addBtn('添加备忘', 'editMemo()');
     return items.map(i => `<div class="card" onclick="App.viewMemo(${i.id})"><div class="card__title">${esc(i.title)}</div><div class="card__note">${esc(i.content)}</div>${actionBtns(`editMemo(${i.id})`, `del('memos',${i.id})`)}</div>`).join('') + addBtn('添加备忘', 'editMemo()');
   }
 
@@ -783,7 +783,7 @@ const App = (() => {
 
   function renderSuggestions() {
     const items = (data.suggestions || []).slice().sort((a, b) => b.id - a.id);
-    if (!items.length) return empty('写下给对方的相处建议，一起变得更默契') + addBtn('写建议', 'editSuggestion()');
+    if (!items.length) return empty('每一次沟通，都是更靠近你') + addBtn('写建议', 'editSuggestion()');
     return addBtn('写建议', 'editSuggestion()') + `<div class="preview-list">${items.map(i => {
       const st = i.response ? 'responded' : (i.read ? 'read' : 'unread');
       const stLabel = i.response ? '已回应' : (i.read ? '已读' : '未读');

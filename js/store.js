@@ -26,7 +26,7 @@ const Store = (() => {
     couple: '恋爱信息', milestones: '节点', dates: '约会记录',
     plans: '愿望瓶', memos: '备忘', travels: '旅行足迹',
     series: '系列', photos: '照片墙', treaties: '恋爱条约',
-    heartwords: '情书', questions: '提问箱', suggestions: '默契贴', navConfig: '导航布局'
+    heartwords: '情书', questions: '提问箱', suggestions: '建议箱', navConfig: '导航布局'
   };
 
   const SNAPSHOT_KEY = 'rj_data_snapshot';
