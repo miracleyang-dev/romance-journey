@@ -151,6 +151,12 @@ const App = (() => {
 
   /* ===== 通用工具 ===== */
 
+  function sortDesc(a, b) {
+    if (a.createdAt && b.createdAt) return b.createdAt.localeCompare(a.createdAt);
+    if (a.date || b.date) return (b.date || '').localeCompare(a.date || '');
+    return (b.id || 0) - (a.id || 0);
+  }
+
   function diffDays(a, b) { return Math.max(0, Math.floor((b - a) / 864e5)); }
   function today0() { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }
   function todayISO() { return new Date().toISOString().slice(0, 10); }
@@ -240,6 +246,7 @@ const App = (() => {
       if (idx >= 0) Object.assign(data[key][idx], fields);
     } else {
       fields.id = Store.nextId(data[key]);
+      fields.createdAt = new Date().toISOString();
       data[key].push(fields);
     }
     persist();
@@ -628,7 +635,7 @@ const App = (() => {
     const s = (data.series || []).find(i => i.id === currentSeriesId);
     if (!s) return empty('系列不存在');
     let html = `<div style="margin-bottom:.8rem"><div style="font-size:1.1rem;font-weight:700">${esc(s.title)}</div>${s.note ? `<div style="font-size:.82rem;color:var(--text2);margin-top:.2rem">${esc(s.note)}</div>` : ''}<button class="btn-secondary" style="margin-top:.4rem;font-size:.75rem;padding:.3rem .8rem" onclick="App.editSeriesTitle(${s.id})">编辑系列</button></div>`;
-    const items = (s.items || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    const items = (s.items || []).slice().sort(sortDesc);
     if (!items.length) html += empty('暂无记录');
     items.forEach(i => { html += `<div class="series-detail-item"><div class="card__date" style="margin-bottom:.2rem">${fmtDate(i.date)}</div><div class="card__title">${esc(i.title)}</div>${i.content ? `<div class="card__note">${esc(i.content)}</div>` : ''}${actionBtns(`editSeriesItem(${s.id},${i.id})`, `delSeriesItem(${s.id},${i.id})`)}</div>`; });
     html += addBtn('添加记录', `editSeriesItem(${s.id})`);
@@ -650,7 +657,7 @@ const App = (() => {
     if (!s.items) s.items = [];
     const fields = { title: v('f_title'), date: v('f_date'), content: rawV('f_content') };
     if (itemId) { const idx = s.items.findIndex(i => i.id === itemId); if (idx >= 0) Object.assign(s.items[idx], fields); }
-    else { fields.id = Store.nextId(s.items); s.items.push(fields); }
+    else { fields.id = Store.nextId(s.items); fields.createdAt = new Date().toISOString(); s.items.push(fields); }
     persist(); closeModal(); render();
   }
 
@@ -663,7 +670,7 @@ const App = (() => {
   /* ===== HEARTWORDS (情书) ===== */
 
   function renderHeartwords() {
-    const items = (data.heartwords || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    const items = (data.heartwords || []).slice().sort(sortDesc);
     if (!items.length) return empty('写下想对 TA 说的心里话，让文字传递真心') + addBtn('写情书', 'editHeartword()');
     return addBtn('写情书', 'editHeartword()') + `<div class="preview-list">${items.map(i => `<div class="preview-card preview-card--heartword" onclick="App.viewHeartword(${i.id})">
         <div class="preview-card__icon">&#128140;</div>
@@ -709,7 +716,7 @@ const App = (() => {
   /* ===== QUESTIONS (提问箱) ===== */
 
   function renderQuestions() {
-    const items = (data.questions || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    const items = (data.questions || []).slice().sort(sortDesc);
     if (!items.length) return empty('写下想问对方的问题，期待 TA 的真实回答') + addBtn('提个问题', 'editQuestion()');
     return addBtn('提个问题', 'editQuestion()') + `<div class="preview-list">${items.map(i => {
       const hasAnswer = !!(i.answer && i.answer.trim());
@@ -782,7 +789,7 @@ const App = (() => {
   /* ===== SUGGESTIONS (建议箱) ===== */
 
   function renderSuggestions() {
-    const items = (data.suggestions || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    const items = (data.suggestions || []).slice().sort(sortDesc);
     if (!items.length) return empty('每一次沟通，都是更靠近你') + addBtn('写建议', 'editSuggestion()');
     return addBtn('写建议', 'editSuggestion()') + `<div class="preview-list">${items.map(i => {
       const st = i.response ? 'responded' : (i.read ? 'read' : 'unread');

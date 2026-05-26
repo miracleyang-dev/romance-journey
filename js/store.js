@@ -172,6 +172,26 @@ const Store = (() => {
         if (!(ck in d.couple)) d.couple[ck] = dc[ck];
       }
     }
+    /* 为缺少 createdAt 的旧记录补齐，用 date 兜底 */
+    const _tsKeys = ['heartwords', 'questions', 'suggestions'];
+    for (const key of _tsKeys) {
+      if (Array.isArray(d[key])) {
+        d[key].forEach(item => {
+          if (!item.createdAt && item.date) {
+            item.createdAt = item.date + 'T00:00:00.000Z';
+          }
+        });
+      }
+    }
+    if (Array.isArray(d.series)) {
+      d.series.forEach(s => {
+        (s.items || []).forEach(item => {
+          if (!item.createdAt && item.date) {
+            item.createdAt = item.date + 'T00:00:00.000Z';
+          }
+        });
+      });
+    }
     return d;
   }
 
