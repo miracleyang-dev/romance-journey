@@ -628,7 +628,7 @@ const App = (() => {
     const s = (data.series || []).find(i => i.id === currentSeriesId);
     if (!s) return empty('系列不存在');
     let html = `<div style="margin-bottom:.8rem"><div style="font-size:1.1rem;font-weight:700">${esc(s.title)}</div>${s.note ? `<div style="font-size:.82rem;color:var(--text2);margin-top:.2rem">${esc(s.note)}</div>` : ''}<button class="btn-secondary" style="margin-top:.4rem;font-size:.75rem;padding:.3rem .8rem" onclick="App.editSeriesTitle(${s.id})">编辑系列</button></div>`;
-    const items = (s.items || []).slice().sort((a, b) => b.id - a.id);
+    const items = (s.items || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     if (!items.length) html += empty('暂无记录');
     items.forEach(i => { html += `<div class="series-detail-item"><div class="card__date" style="margin-bottom:.2rem">${fmtDate(i.date)}</div><div class="card__title">${esc(i.title)}</div>${i.content ? `<div class="card__note">${esc(i.content)}</div>` : ''}${actionBtns(`editSeriesItem(${s.id},${i.id})`, `delSeriesItem(${s.id},${i.id})`)}</div>`; });
     html += addBtn('添加记录', `editSeriesItem(${s.id})`);
@@ -663,7 +663,7 @@ const App = (() => {
   /* ===== HEARTWORDS (情书) ===== */
 
   function renderHeartwords() {
-    const items = (data.heartwords || []).slice().sort((a, b) => b.id - a.id);
+    const items = (data.heartwords || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     if (!items.length) return empty('写下想对 TA 说的心里话，让文字传递真心') + addBtn('写情书', 'editHeartword()');
     return addBtn('写情书', 'editHeartword()') + `<div class="preview-list">${items.map(i => `<div class="preview-card preview-card--heartword" onclick="App.viewHeartword(${i.id})">
         <div class="preview-card__icon">&#128140;</div>
@@ -709,7 +709,7 @@ const App = (() => {
   /* ===== QUESTIONS (提问箱) ===== */
 
   function renderQuestions() {
-    const items = (data.questions || []).slice().sort((a, b) => b.id - a.id);
+    const items = (data.questions || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     if (!items.length) return empty('写下想问对方的问题，期待 TA 的真实回答') + addBtn('提个问题', 'editQuestion()');
     return addBtn('提个问题', 'editQuestion()') + `<div class="preview-list">${items.map(i => {
       const hasAnswer = !!(i.answer && i.answer.trim());
@@ -782,7 +782,7 @@ const App = (() => {
   /* ===== SUGGESTIONS (建议箱) ===== */
 
   function renderSuggestions() {
-    const items = (data.suggestions || []).slice().sort((a, b) => b.id - a.id);
+    const items = (data.suggestions || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     if (!items.length) return empty('每一次沟通，都是更靠近你') + addBtn('写建议', 'editSuggestion()');
     return addBtn('写建议', 'editSuggestion()') + `<div class="preview-list">${items.map(i => {
       const st = i.response ? 'responded' : (i.read ? 'read' : 'unread');
@@ -989,7 +989,7 @@ const App = (() => {
         mergeData(imported);
       } else {
         if (!confirm('覆盖将清空当前所有数据，确认？')) { e.target.value = ''; return; }
-        data = imported;
+        data = Store.normalizeData(imported);
       }
       persist(); renderNav(); render(); alert('导入成功');
     } catch (_) { alert('导入失败，请检查文件格式'); }
@@ -1021,9 +1021,23 @@ const App = (() => {
   }
 
   function clearData() {
-    if (!confirm('确定清除所有数据？')) return;
+    showModal('清除所有数据', `
+      <div style="padding:.5rem 0">
+        <p style="font-size:.9rem;color:#c0392b;font-weight:600;margin-bottom:.6rem">⚠ 此操作不可逆，将清除所有恋爱数据！</p>
+        <p style="font-size:.85rem;color:var(--text2);margin-bottom:1rem;line-height:1.5">请在下方输入 <strong style="color:#c0392b">确认清除</strong> 后点击按钮执行。</p>
+        <input id="f_clear_confirm" placeholder="请输入「确认清除」" autocomplete="off" style="text-align:center">
+      </div>
+      <div class="modal__footer"><button class="btn-primary" style="background:#c0392b" onclick="App.execClearData()">清除所有数据</button></div>`);
+  }
+
+  function execClearData() {
+    const input = v('f_clear_confirm');
+    if (input !== '确认清除') {
+      alert('输入不正确，请输入「确认清除」');
+      return;
+    }
     data = JSON.parse(JSON.stringify(Store.defaultData));
-    persist(); renderNav(); render();
+    persist(); closeModal(); renderNav(); render();
   }
 
   /* ===== Start ===== */
@@ -1050,6 +1064,6 @@ const App = (() => {
     respondSuggestion, saveResponse, syncSuggestionTo,
     editCouple, saveCouple, showInviteCode,
     editNavConfig, navToggle, navMove, saveNavConfig, resetNavConfig,
-    del, handleImport, clearData
+    del, handleImport, clearData, execClearData
   };
 })();

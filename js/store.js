@@ -163,7 +163,13 @@ const Store = (() => {
     for (const k in DEFAULT_DATA) {
       if (!(k in d)) {
         const def = DEFAULT_DATA[k];
-        d[k] = Array.isArray(def) ? [] : (typeof def === 'object' && def !== null ? {} : def);
+        d[k] = Array.isArray(def) ? [] : (typeof def === 'object' && def !== null ? JSON.parse(JSON.stringify(def)) : def);
+      }
+    }
+    if (d.couple && typeof d.couple === 'object') {
+      const dc = DEFAULT_DATA.couple;
+      for (const ck in dc) {
+        if (!(ck in d.couple)) d.couple[ck] = dc[ck];
       }
     }
     return d;
@@ -175,11 +181,14 @@ const Store = (() => {
   }
 
   function exportJSON(d) {
-    const blob = new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' });
+    const clean = JSON.parse(JSON.stringify(d));
+    delete clean._lastEditorId;
+    delete clean._needPair;
+    const blob = new Blob([JSON.stringify(clean, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     const url = URL.createObjectURL(blob);
     a.href = url;
-    a.download = 'data.json';
+    a.download = 'data_' + new Date().toISOString().slice(0, 10) + '.json';
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
@@ -282,7 +291,7 @@ const Store = (() => {
     subscribe, unsubscribe,
     createCouple, joinCouple, getInviteCode,
     uploadImage, nextId,
-    exportJSON, importJSON,
+    exportJSON, importJSON, normalizeData,
     cloneDefault, defaultData: DEFAULT_DATA,
     saveSnapshot, detectChanges
   };
