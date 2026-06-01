@@ -540,25 +540,26 @@ const App = (() => {
   function renderMemo() {
     const items = (data.memos || []).slice().sort((a, b) => b.id - a.id);
     if (!items.length) return empty('对方的喜好、家里的密码、重要的事都放这') + addBtn('添加备忘', 'editMemo()');
-    return items.map(i => `<div class="card" onclick="App.viewMemo(${i.id})"><div class="card__title">${esc(i.title)}</div><div class="card__note">${esc(i.content)}</div>${actionBtns(`editMemo(${i.id})`, `del('memos',${i.id})`)}</div>`).join('') + addBtn('添加备忘', 'editMemo()');
+    return items.map(i => `<div class="card" onclick="App.viewMemo(${i.id})"><div class="card__title">${esc(i.title)}</div>${i.description ? `<div class="card__note">${esc(i.description)}</div>` : ''}${actionBtns(`editMemo(${i.id})`, `del('memos',${i.id})`)}</div>`).join('') + addBtn('添加备忘', 'editMemo()');
   }
 
   function viewMemo(id) {
     const item = (data.memos || []).find(i => i.id === id); if (!item) return;
-    showModal(item.title, `<div style="white-space:pre-wrap;font-size:.9rem;line-height:1.6">${esc(item.content)}</div><div class="modal__footer"><button class="btn-secondary" onclick="App.closeModal();App.editMemo(${item.id})">编辑</button><button class="btn-secondary" style="color:#c0392b" onclick="App.del('memos',${item.id})">删除</button></div>`);
+    showModal(item.title, `${item.description ? `<div style="font-size:.85rem;color:var(--text2);margin-bottom:.6rem;line-height:1.5">${esc(item.description)}</div>` : ''}<div style="white-space:pre-wrap;font-size:.9rem;line-height:1.6">${esc(item.content)}</div><div class="modal__footer"><button class="btn-secondary" onclick="App.closeModal();App.editMemo(${item.id})">编辑</button><button class="btn-secondary" style="color:#c0392b" onclick="App.del('memos',${item.id})">删除</button></div>`);
   }
 
   function editMemo(id) {
-    const item = id ? (data.memos || []).find(i => i.id === id) : { title: '', content: '' };
+    const item = id ? (data.memos || []).find(i => i.id === id) : { title: '', description: '', content: '' };
     showModal(id ? '编辑备忘' : '添加备忘', `
       <label>标题</label><input id="f_title" value="${esc(item.title)}" placeholder="例：共同银行卡号">
       <div class="hint-text">例：共同银行卡号 / 对方衣服尺码 / WiFi密码 / 家务排班 / 常用地址</div>
+      <label>介绍</label><textarea id="f_description" style="min-height:60px" placeholder="简要描述这条备忘的用途或说明">${esc(item.description || '')}</textarea>
       <label>内容</label><textarea id="f_content" style="min-height:120px">${esc(item.content)}</textarea>
       <div class="modal__footer"><button class="btn-primary" onclick="App.saveMemo(${id || 0})">保存</button></div>`);
   }
 
   function saveMemo(id) {
-    saveItem('memos', id, { title: v('f_title'), content: rawV('f_content') });
+    saveItem('memos', id, { title: v('f_title'), description: rawV('f_description'), content: rawV('f_content') });
     closeModal(); render();
   }
 
