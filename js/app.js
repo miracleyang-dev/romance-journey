@@ -84,6 +84,20 @@ const App = (() => {
   /* ===== 初始化 & 路由 ===== */
 
   let _navBound = false;
+  let _midnightTimer = null;
+  let _visibilityBound = false;
+
+  // 在下一次本地 0 点准时刷新页面，并递归调度下一次
+  function scheduleMidnightRefresh() {
+    if (_midnightTimer) clearTimeout(_midnightTimer);
+    const now = new Date();
+    const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 1);
+    _midnightTimer = setTimeout(() => {
+      render();
+      scheduleMidnightRefresh();
+    }, next - now);
+  }
+
   async function init() {
     Store.init();
     if (!_navBound) {
@@ -92,6 +106,13 @@ const App = (() => {
         if (btn) goTab(btn.dataset.tab);
       });
       _navBound = true;
+    }
+    if (!_visibilityBound) {
+      // 设备休眠后 setTimeout 不一定准时；回到前台时立即补一次刷新并重排
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) { render(); scheduleMidnightRefresh(); }
+      });
+      _visibilityBound = true;
     }
     const loaded = await Store.load();
     if (!loaded) { Auth.renderAuthScreen(); return; }
@@ -103,6 +124,7 @@ const App = (() => {
     Store.subscribe(newData => { data = newData; Store.saveSnapshot(data); renderNav(); render(); });
     renderNav();
     render();
+    scheduleMidnightRefresh();
 
     if (changedModules.length > 0) {
       setTimeout(() => _showChangeNotification(changedModules), 400);
@@ -159,6 +181,12 @@ const App = (() => {
 
   function diffDays(a, b) { return Math.max(0, Math.floor((b - a) / 864e5)); }
   function today0() { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }
+  // 把 "YYYY-MM-DD" 按本地 0 点解析，避免被当作 UTC 而引入时区偏移
+  function parseLocalDate(s) {
+    if (!s) return null;
+    const [y, m, d] = s.split('-').map(Number);
+    return new Date(y, (m || 1) - 1, d || 1);
+  }
   function todayISO() { return new Date().toISOString().slice(0, 10); }
   function fmtDate(s) { return s ? s.replace(/-/g, '.') : ''; }
   function v(id) { return (document.getElementById(id)?.value || '').trim(); }
@@ -266,7 +294,7 @@ const App = (() => {
     const start = data.couple.startDate;
     let heroHtml;
     if (start) {
-      const days = diffDays(new Date(start), new Date());
+      const days = diffDays(parseLocalDate(start), today0());
       const na = data.couple.nameA || '我', nb = data.couple.nameB || '你';
       heroHtml = `<div class="hero"><div class="hero__heart">&hearts;</div><div class="hero__days">${days}</div><div class="hero__names">${esc(na)} & ${esc(nb)} 在一起的第 ${days} 天</div></div>`;
     } else {
@@ -387,12 +415,25 @@ const App = (() => {
   /* ===== PLANS ===== */
 
   function renderPlans() {
-    const items = (data.plans || []).slice().sort((a, b) => (a.done ? 1 : 0) - (b.done ? 1 : 0));
-    const slips = items.map((p, idx) => {
-      const t = p.done ? `<span class="done-mark">${esc(p.title)}</span>` : esc(p.title);
-      return `<div class="note-slip note-colors-${idx % 6}" onclick="App.viewPlan(${p.id})">${t}</div>`;
-    }).join('');
-    return `<div class="bottle-scene"><div class="bottle"><div class="bottle__cork"></div>${slips || '<div class="empty" style="padding:2rem 0;font-size:.8rem">瓶子是空的，放入第一张纸条吧</div>'}</div><button class="bottle-add" onclick="App.editPlan()">+ 塞入纸条</button></div>`;
+    const all = (data.plans || []);
+    const active = all.filter(p => !p.done);
+    const archived = all.filter(p => p.done);
+
+    const slips = active.map((p, idx) =>
+      `<div class="note-slip note-colors-${idx % 6}" onclick="App.viewPlan(${p.id})">${esc(p.title)}</div>`
+    ).join('');
+
+    const bottle = `<div class="bottle-scene"><div class="bottle"><div class="bottle__cork"></div>${slips || '<div class="empty" style="padding:2rem 0;font-size:.8rem">瓶子是空的，放入第一张纸条吧</div>'}</div><button class="bottle-add" onclick="App.editPlan()">+ 塞入纸条</button></div>`;
+
+    let archive = '';
+    if (archived.length) {
+      const items = archived.map((p, idx) =>
+        `<div class="note-slip note-colors-${idx % 6}" onclick="App.viewPlan(${p.id})">${esc(p.title)}</div>`
+      ).join('');
+      archive = `<details class="plans-archive"><summary>已归档 (${archived.length})</summary><div class="plans-archive__list">${items}</div></details>`;
+    }
+
+    return bottle + archive;
   }
 
   function viewPlan(id) {
