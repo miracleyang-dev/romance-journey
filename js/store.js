@@ -144,7 +144,13 @@ const Store = (() => {
   /* ===== 图片上传 ===== */
 
   async function uploadImage(file) {
-    const compressed = await _compressImage(file);
+    let compressed;
+    try {
+      compressed = await _compressImage(file);
+    } catch (err) {
+      console.warn('图片压缩失败', err);
+      return null;
+    }
     if (!sb || !coupleId) return compressed;
     const blob = _dataURLtoBlob(compressed);
     const path = coupleId + '/' + Date.now() + '.jpg';
@@ -228,17 +234,30 @@ const Store = (() => {
   /* ===== 内部工具 ===== */
 
   function _compressImage(file, maxW = 600) {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const img = new Image();
       const objUrl = URL.createObjectURL(file);
+      const cleanup = () => { try { URL.revokeObjectURL(objUrl); } catch (_) {} };
       img.onload = () => {
-        let w = img.width, h = img.height;
-        if (w > maxW) { h = h * maxW / w; w = maxW; }
-        const c = document.createElement('canvas');
-        c.width = w; c.height = h;
-        c.getContext('2d').drawImage(img, 0, 0, w, h);
-        URL.revokeObjectURL(objUrl);
-        resolve(c.toDataURL('image/jpeg', 0.7));
+        try {
+          let w = img.width, h = img.height;
+          if (!w || !h) { cleanup(); reject(new Error('图片尺寸无效')); return; }
+          if (w > maxW) { h = h * maxW / w; w = maxW; }
+          const c = document.createElement('canvas');
+          c.width = w; c.height = h;
+          const ctx = c.getContext('2d');
+          if (!ctx) { cleanup(); reject(new Error('Canvas 不可用')); return; }
+          ctx.drawImage(img, 0, 0, w, h);
+          cleanup();
+          resolve(c.toDataURL('image/jpeg', 0.7));
+        } catch (err) {
+          cleanup();
+          reject(err);
+        }
+      };
+      img.onerror = () => {
+        cleanup();
+        reject(new Error('图片加载失败'));
       };
       img.src = objUrl;
     });

@@ -1,25 +1,22 @@
 const Auth = (() => {
-  const CRED_KEY = 'rj_saved_credentials';
+  // 仅记忆邮箱用于登录界面预填，避免在 localStorage 中保存密码
+  // (Supabase SDK 自身已会持久化 session token，刷新页面会自动恢复登录态)
+  const EMAIL_KEY = 'rj_saved_email';
 
-  function _saveCredentials(email, pwd) {
-    try {
-      localStorage.setItem(CRED_KEY, btoa(unescape(encodeURIComponent(
-        JSON.stringify({ e: email, p: pwd })
-      ))));
-    } catch (_) {}
+  function _saveEmail(email) {
+    try { localStorage.setItem(EMAIL_KEY, email || ''); } catch (_) {}
   }
 
-  function _loadCredentials() {
-    try {
-      const raw = localStorage.getItem(CRED_KEY);
-      if (!raw) return null;
-      return JSON.parse(decodeURIComponent(escape(atob(raw))));
-    } catch (_) { return null; }
+  function _loadEmail() {
+    try { return localStorage.getItem(EMAIL_KEY) || ''; } catch (_) { return ''; }
   }
 
-  function _clearCredentials() {
-    try { localStorage.removeItem(CRED_KEY); } catch (_) {}
+  function _clearEmail() {
+    try { localStorage.removeItem(EMAIL_KEY); } catch (_) {}
   }
+
+  // 兼容历史版本：清理旧的明文密码缓存
+  try { localStorage.removeItem('rj_saved_credentials'); } catch (_) {}
 
   function _escAttr(s) {
     if (!s) return '';
@@ -36,25 +33,11 @@ const Auth = (() => {
     document.getElementById('bottomnav').innerHTML = '';
     document.getElementById('backBtn').hidden = true;
     document.getElementById('topTitle').textContent = '恋爱日志';
-
-    const saved = _loadCredentials();
-    if (saved && saved.e && saved.p) {
-      document.getElementById('main').innerHTML =
-        '<div class="auth-screen">' +
-          '<div class="auth-heart">&hearts;</div>' +
-          '<h2 class="auth-title">恋爱日志</h2>' +
-          '<p class="auth-subtitle">自动登录中...</p>' +
-          '<div class="auth-form"><div class="auth-error" id="authError"></div></div>' +
-        '</div>';
-      _autoLogin(saved.e, saved.p);
-      return;
-    }
-    _renderLoginForm('', '');
+    _renderLoginForm(_loadEmail());
   }
 
-  function _renderLoginForm(prefillEmail, prefillPwd) {
-    const saved = _loadCredentials();
-    const checked = !!(saved && saved.e);
+  function _renderLoginForm(prefillEmail) {
+    const checked = !!prefillEmail;
     document.getElementById('main').innerHTML =
       '<div class="auth-screen">' +
         '<div class="auth-heart">&hearts;</div>' +
@@ -62,8 +45,8 @@ const Auth = (() => {
         '<p class="auth-subtitle">登录后双人共享，数据云端同步</p>' +
         '<div class="auth-form">' +
           '<input id="authEmail" type="email" placeholder="邮箱" value="' + _escAttr(prefillEmail) + '">' +
-          '<input id="authPwd" type="password" placeholder="密码（至少 6 位）" value="' + _escAttr(prefillPwd) + '">' +
-          '<label class="auth-remember"><input type="checkbox" id="authRemember"' + (checked ? ' checked' : '') + '><span>记住密码</span></label>' +
+          '<input id="authPwd" type="password" placeholder="密码（至少 6 位）">' +
+          '<label class="auth-remember"><input type="checkbox" id="authRemember"' + (checked ? ' checked' : '') + '><span>记住邮箱</span></label>' +
           '<button class="btn-primary auth-btn" onclick="Auth.login()">登录</button>' +
           '<button class="btn-secondary auth-btn" onclick="Auth.register()">注册新账号</button>' +
           '<div class="auth-error" id="authError"></div>' +
@@ -71,23 +54,10 @@ const Auth = (() => {
       '</div>';
   }
 
-  async function _autoLogin(email, pwd) {
-    const sb = Store.client();
-    if (!sb) { _renderLoginForm(email, ''); return; }
-    const result = await sb.auth.signInWithPassword({ email, password: pwd });
-    if (result.error) {
-      _clearCredentials();
-      _renderLoginForm(email, '');
-      _showError('自动登录失败，请重新输入密码');
-      return;
-    }
-    App.init();
-  }
-
-  function _handleRemember(email, pwd) {
+  function _handleRemember(email) {
     const el = document.getElementById('authRemember');
-    if (el && el.checked) _saveCredentials(email, pwd);
-    else _clearCredentials();
+    if (el && el.checked) _saveEmail(email);
+    else _clearEmail();
   }
 
   async function login() {
@@ -98,7 +68,7 @@ const Auth = (() => {
     const sb = Store.client();
     const result = await sb.auth.signInWithPassword({ email, password: pwd });
     if (result.error) { _showError('登录失败：' + result.error.message); return; }
-    _handleRemember(email, pwd);
+    _handleRemember(email);
     App.init();
   }
 
@@ -111,7 +81,12 @@ const Auth = (() => {
     const sb = Store.client();
     const result = await sb.auth.signUp({ email, password: pwd });
     if (result.error) { _showError('注册失败：' + result.error.message); return; }
-    _handleRemember(email, pwd);
+    _handleRemember(email);
+    // 若 Supabase 开启了邮箱确认，signUp 不会返回 session，避免直接跳进 App 后又空白
+    if (!result.data || !result.data.session) {
+      _showError('注册成功，请前往邮箱完成验证后再登录');
+      return;
+    }
     App.init();
   }
 
@@ -167,7 +142,7 @@ const Auth = (() => {
     if (!confirm('确定退出登录？')) return;
     const sb = Store.client();
     Store.unsubscribe();
-    _clearCredentials();
+    _clearEmail();
     if (sb) await sb.auth.signOut();
     renderAuthScreen();
   }

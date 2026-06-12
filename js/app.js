@@ -202,8 +202,18 @@ const App = (() => {
   function nextSolarForMilestone(ms) {
     if (ms.isLunar) return Lunar.nextOccurrence(ms.month, ms.day);
     const now = today0();
-    let d = new Date(now.getFullYear(), ms.month - 1, ms.day);
-    if (d < now) d.setFullYear(d.getFullYear() + 1);
+    // 处理 2/29 这种闰日：非闰年 new Date(y,1,29) 会被 JS 自动滚到 3/1，需要顺延到下一个闰年
+    const isValid = (y) => {
+      const d = new Date(y, ms.month - 1, ms.day);
+      return d.getMonth() === (ms.month - 1) && d.getDate() === ms.day;
+    };
+    let y = now.getFullYear();
+    let d = isValid(y) ? new Date(y, ms.month - 1, ms.day) : null;
+    if (!d || d < now) {
+      for (let i = 1; i <= 8; i++) {
+        if (isValid(y + i)) { d = new Date(y + i, ms.month - 1, ms.day); break; }
+      }
+    }
     return d;
   }
 
@@ -320,6 +330,8 @@ const App = (() => {
   async function addPhoto(e) {
     const file = e.target.files[0]; if (!file) return;
     const src = await Store.uploadImage(file);
+    e.target.value = '';
+    if (!src) { alert('图片处理失败，请换一张试试'); return; }
     if (!data.photos) data.photos = [];
     data.photos.push({ id: Store.nextId(data.photos), src, note: '' });
     persist(); render();
