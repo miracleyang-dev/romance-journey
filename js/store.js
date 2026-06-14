@@ -19,6 +19,7 @@ const Store = (() => {
     heartwords: [],
     questions: [],
     suggestions: [],
+    reflections: [],
     navConfig: null
   };
 
@@ -26,7 +27,8 @@ const Store = (() => {
     couple: '恋爱信息', milestones: '节点', dates: '约会记录',
     plans: '愿望瓶', memos: '备忘', travels: '旅行足迹',
     series: '系列', photos: '照片墙', treaties: '恋爱条约',
-    heartwords: '情书', questions: '提问箱', suggestions: '建议箱', navConfig: '导航布局'
+    heartwords: '情书', questions: '提问箱', suggestions: '建议箱',
+    reflections: '自省独白', navConfig: '导航布局'
   };
 
   const SNAPSHOT_KEY = 'rj_data_snapshot';
@@ -179,7 +181,7 @@ const Store = (() => {
       }
     }
     /* 为缺少 createdAt 的旧记录补齐，用 date 兜底 */
-    const _tsKeys = ['heartwords', 'questions', 'suggestions'];
+    const _tsKeys = ['heartwords', 'questions', 'suggestions', 'reflections'];
     for (const key of _tsKeys) {
       if (Array.isArray(d[key])) {
         d[key].forEach(item => {
