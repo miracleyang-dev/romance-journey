@@ -15,7 +15,7 @@
 - 数据导入 / 导出，支持叠加合并和整体覆盖
 - 清除所有数据，带二次确认文本
 - 双人共享、实时同步、邀请码配对与变更提醒
-- PWA 配置，支持添加到桌面
+- PWA 配置 + Service Worker 离线缓存，支持添加到桌面
 
 ## 模块说明
 
@@ -32,7 +32,7 @@
 | heartwords | 情书 | 写给对方的心里话，需署名 |
 | questions | 提问箱 | 向对方提问，需署名 |
 | suggestions | 建议箱 | 给对方的相处建议，支持已读和回应 |
-| reflections | 自省 | 只关于自己的独白，支持“已看到”标记 |
+| reflections | 自省独白 | 一支羽毛笔，写给自己的话；允许沉默，也允许被 TA 看见，支持「已看到」回应 |
 | photos | 照片墙 | 首页照片展示 |
 
 ## 技术栈
@@ -44,21 +44,56 @@
 
 ```
 index.html           入口和 UI 容器
+sw.js                Service Worker：版本化缓存 + 离线降级 + 旧缓存清理
 css/style.css        样式与主题
 js/app.js            应用主逻辑与页面渲染
 js/auth.js           登录、注册、配对、退出
 js/store.js          Supabase 持久化、同步、图片上传、变更检测
 js/lunar.js          农历公历换算
 js/config.js         Supabase 连接配置
-manifest.json        PWA 清单
-icons/favicon.svg    站点图标
-icons/apple-touch-icon.png  iOS 图标
-icons/icon-192.png   PWA 图标
-icons/icon-512.png   PWA 图标
-icons/icon-1024.png  PWA 图标
+manifest.json        PWA 清单（含 any / maskable 双图标）
+icons/favicon.svg            站点 SVG 矢量图标
+icons/apple-touch-icon.png   iOS 主屏图标（180×180）
+icons/icon-192.png           PWA 图标（any，192×192）
+icons/icon-512.png           PWA 图标（any，512×512）
+icons/icon-192-maskable.png  PWA Maskable 图标（含安全区，192×192）
+icons/icon-512-maskable.png  PWA Maskable 图标（含安全区，512×512）
+icons/icon-1024.png          源图（用于派生其它尺寸）
 nginx.conf           Nginx 静态站点配置
 Dockerfile           Nginx 静态部署
 ```
+
+## 缓存与版本机制
+
+为了避免「旧 Service Worker / 旧静态资源覆盖新版」，本项目使用 **发版日期** 作为版本号：
+
+- `index.html` 中所有 `?v=YYYYMMDD` 查询字符串；
+- `sw.js` 顶部的 `APP_VERSION = 'YYYYMMDD'`，决定 `CACHE_NAME`；
+- `manifest.json` 中的 `version` 字段。
+
+三处保持一致即可。同一天多次发版可以追加 `-HHMM`（例如 `20260616-1830`）。
+
+Service Worker 行为：
+
+- **install**：预缓存应用外壳（HTML / CSS / JS / 图标）。
+- **activate**：删除所有 `romance-journey-` 前缀但版本号不匹配的旧缓存。
+- **fetch**：
+  - HTML / manifest 走 **network-first**，离线时降级到缓存；
+  - 同源静态资源走 **stale-while-revalidate**，并剥离 `?v=` 命中干净 URL 缓存；
+  - Supabase 等跨域请求直通网络。
+- 页面端在监听到新 SW 接管（`controllerchange`）时会自动 reload 一次，确保用户拿到最新代码。
+
+## PWA 桌面图标
+
+`manifest.json` 同时声明三类图标：
+
+| 类型 | 用途 |
+|------|------|
+| `image/svg+xml`（favicon.svg）| 浏览器标签页 / 高分屏自适应 |
+| `image/png` `purpose=any` | 普通 Launcher / 旧版浏览器 |
+| `image/png` `purpose=maskable` | Android 自适应图标，已经预留 ~20% 安全区，避免被裁切成「方块/碎片」 |
+
+并在 `<head>` 中显式声明 `apple-touch-icon`（180×180）与多尺寸 `<link rel="icon">`，保证桌面安装在 Chrome / Edge / Safari / 安卓自适应图标场景下都能命中正确资源。
 
 ## 本地运行
 

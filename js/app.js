@@ -31,8 +31,8 @@ const App = (() => {
       icon:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M12 7v.01"/><path d="M12 14c0-2 1.5-2.5 1.5-4a1.5 1.5 0 1 0-3 0"/></svg>' },
     { key:'suggestions', label:'建议箱', emoji:'&#128230;', title:'建议箱',
       icon:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v8"/><path d="M8 7l4 4 4-4"/></svg>' },
-    { key:'reflections', label:'自省', emoji:'&#129752;', title:'自省独白',
-      icon:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="9" rx="6" ry="7"/><line x1="12" y1="16" x2="12" y2="22"/><line x1="9" y1="22" x2="15" y2="22"/></svg>' },
+    { key:'reflections', label:'自省独白', emoji:'&#129718;', title:'自省独白',
+      icon:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 3c-3.5 0-7 2-9 5s-3 6-3 9l3-3c2-2 4-2.5 6-3"/><path d="M20 3c-1 4-3 7-6 9"/><path d="M11 14l-7 7"/><path d="M4 21h5"/></svg>' },
   ];
 
   const DEFAULT_CONFIG = [
@@ -979,11 +979,11 @@ const App = (() => {
 
   function renderReflections() {
     const items = (data.reflections || []).slice().sort(sortDesc);
-    if (!items.length) return empty('写一段只关于自己的话。说给 TA 听，也说给自己听。') + addBtn('写一段独白', 'editReflection()');
-    return addBtn('写一段独白', 'editReflection()') + `<div class="preview-list">${items.map(i => {
+    if (!items.length) return empty('一支羽毛笔，写给自己的话。允许沉默，也允许被 TA 看见。') + addBtn('写一段自省独白', 'editReflection()');
+    return addBtn('写一段自省独白', 'editReflection()') + `<div class="preview-list">${items.map(i => {
       const seen = !!(i.seenBy);
       return `<div class="preview-card preview-card--reflect ${seen ? 'seen' : ''}" onclick="App.viewReflection(${i.id})">
-        <div class="preview-card__icon">&#129752;</div>
+        <div class="preview-card__icon">&#129718;</div>
         <div class="preview-card__body">
           <div class="preview-card__text">${esc(i.content)}</div>
           <div class="preview-card__meta">${i.author ? `<span class="preview-card__author">${esc(i.author)}</span>` : ''}<span>${fmtDate(i.date)}</span><span class="preview-card__status ${seen ? 'green' : ''}">${seen ? '已被看到' : '等待被看到'}</span></div>
@@ -996,13 +996,13 @@ const App = (() => {
   function viewReflection(id) {
     const i = (data.reflections || []).find(x => x.id === id); if (!i) return;
     const seen = !!(i.seenBy);
-    showModal('独白', `
+    showModal('自省独白', `
       <div class="detail-view">
         <div class="detail-view__content">${esc(i.content)}</div>
         <div class="detail-view__meta">${i.author ? `<span style="color:var(--accent);font-weight:600">${esc(i.author)}</span> · ` : ''}${fmtDate(i.date)}</div>
         ${seen ? `<div class="detail-view__label" style="margin-top:.8rem">${esc(i.seenBy)} 的回应</div>
           <div class="detail-view__answer">${esc(i.seenNote || '看到了')}</div>
-          <div style="font-size:.75rem;color:var(--text3);margin-top:.2rem">${fmtDate(i.seenDate)}</div>` : `<div style="margin-top:.8rem;color:var(--text3);font-style:italic">等待对方看到这段独白…</div>`}
+          <div style="font-size:.75rem;color:var(--text3);margin-top:.2rem">${fmtDate(i.seenDate)}</div>` : `<div style="margin-top:.8rem;color:var(--text3);font-style:italic">等待对方看到这段自省独白…</div>`}
       </div>
       <div class="modal__footer">
         ${seen ? '' : `<button class="btn-primary" onclick="App.closeModal();App.markReflectionSeen(${i.id})">我看到了</button>`}
@@ -1014,12 +1014,12 @@ const App = (() => {
   function editReflection(id) {
     if (needNames()) {
       showModal('请先设置称呼', `
-        <div style="text-align:center;padding:1rem 0"><p style="font-size:.9rem;color:var(--text2);line-height:1.6">写独白前，请先在设置中填写双方称呼</p></div>
+        <div style="text-align:center;padding:1rem 0"><p style="font-size:.9rem;color:var(--text2);line-height:1.6">写自省独白前，请先在设置中填写双方称呼</p></div>
         <div class="modal__footer"><button class="btn-primary" onclick="App.closeModal();App.goTab('settings');App.editCouple()">前往设置</button></div>`);
       return;
     }
     const item = id ? (data.reflections || []).find(i => i.id === id) : { content: '', date: todayISO(), author: '' };
-    showModal(id ? '编辑独白' : '写一段独白', `
+    showModal(id ? '编辑自省独白' : '写一段自省独白', `
       <label>想对自己说的话</label>
       <textarea id="f_content" style="min-height:130px" placeholder="把心里想了很久的话写出来…">${esc(item.content)}</textarea>
       <label>署名</label><select id="f_author">${nameOptionsRequired(item.author)}</select>

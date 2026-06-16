@@ -4,17 +4,23 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
   <title>恋爱日志</title>
-  <link rel="icon" type="image/svg+xml" href="icons/favicon.svg">
-  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="manifest" href="manifest.json">
+  <!-- 静态资源版本号：发版当天日期 yyyymmdd（同日多次发版可改为 yyyymmdd-HHMM）
+       与 sw.js 中 APP_VERSION、manifest.json 中 version 同步维护即可。 -->
+  <link rel="icon" type="image/svg+xml" sizes="any" href="icons/favicon.svg?v=20260616">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png?v=20260616">
+  <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png?v=20260616">
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png?v=20260616">
+  <link rel="manifest" href="manifest.json?v=20260616">
   <meta name="theme-color" content="#d4726a">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="恋爱日志">
-  <link rel="stylesheet" href="css/style.css?v=20260614">
+  <meta name="application-name" content="恋爱日志">
+  <link rel="stylesheet" href="css/style.css?v=20260616">
   <!-- Supabase SDK -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-  <script src="js/config.js"></script>
+  <script src="js/config.js?v=20260616"></script>
 </head>
 <body>
   <!-- 顶栏 -->
@@ -42,9 +48,38 @@
     </div>
   </div>
 
-  <script src="js/lunar.js?v=20260614"></script>
-  <script src="js/store.js?v=20260614"></script>
-  <script src="js/auth.js?v=20260614"></script>
-  <script src="js/app.js?v=20260614"></script>
+  <script src="js/lunar.js?v=20260616"></script>
+  <script src="js/store.js?v=20260616"></script>
+  <script src="js/auth.js?v=20260616"></script>
+  <script src="js/app.js?v=20260616"></script>
+
+  <!-- 注册 Service Worker；版本号变化时新 SW 安装后会清掉旧 cache -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js?v=20260616').then((reg) => {
+          if (reg.waiting) reg.waiting.postMessage('SKIP_WAITING');
+          reg.addEventListener('updatefound', () => {
+            const sw = reg.installing;
+            if (!sw) return;
+            sw.addEventListener('statechange', () => {
+              if (sw.state === 'installed' && navigator.serviceWorker.controller) {
+                sw.postMessage('SKIP_WAITING');
+              }
+            });
+          });
+        }).catch(() => {});
+        // 仅在已有旧 SW 接管时才需要 reload；首装 claim 不触发刷新，避免新用户白屏闪烁
+        if (navigator.serviceWorker.controller) {
+          let _swReloaded = false;
+          navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (_swReloaded) return;
+            _swReloaded = true;
+            window.location.reload();
+          });
+        }
+      });
+    }
+  </script>
 </body>
 </html>
