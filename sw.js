@@ -1,10 +1,10 @@
 /* Romance Journey Service Worker
  * 版本号采用 yyyymmdd（与 index.html / manifest 同步）：
  *   - 任意资源发版日 → APP_VERSION 改写为当天日期；
- *   - 同一天多次发版可在后面追加 -HHMM，例如 20260616-1830；
+ *   - 同一天多次发版可在后面追加 -HHMM，例如 20260620-1830；
  *   - 新版 SW 安装完成后会主动 skipWaiting + 清理旧 cache，避免「老缓存覆盖新代码」。
  */
-const APP_VERSION = '20260616';
+const APP_VERSION = '20260620';
 const CACHE_NAME  = 'romance-journey-' + APP_VERSION;
 
 /* 需要预缓存的应用外壳；这里全部用相对路径以兼容子目录部署。

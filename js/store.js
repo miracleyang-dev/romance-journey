@@ -200,6 +200,12 @@ const Store = (() => {
         });
       });
     }
+    /* 旅行足迹：存量数据补齐 status 字段，默认视为已去 */
+    if (Array.isArray(d.travels)) {
+      d.travels.forEach(t => {
+        if (!t.status) t.status = 'visited';
+      });
+    }
     return d;
   }
 
@@ -285,18 +291,114 @@ const Store = (() => {
     return hash;
   }
 
-  function _fingerprint(val) {
-    if (val == null) return '0';
-    const json = JSON.stringify(val);
-    return _djb2(json) + ':' + json.length;
+  function _itemHash(item) {
+    if (item == null) return 0;
+    return _djb2(JSON.stringify(item));
+  }
+
+  function _trim(s, n) {
+    if (!s) return '';
+    s = String(s);
+    return s.length > n ? s.slice(0, n) + '…' : s;
+  }
+
+  /* 为不同模块返回单条记录的人类可读摘要，用于条目级提醒 */
+  function _itemSummary(key, item) {
+    if (!item) return '一条记录';
+    switch (key) {
+      case 'memos':       return item.title || '一条备忘';
+      case 'dates':       return item.event || item.date || '一次约会';
+      case 'travels':     return item.city || item.place || '一处足迹';
+      case 'plans':       return item.title || '一个心愿';
+      case 'milestones':  return item.title || '一个节点';
+      case 'treaties':    return item.title || '一条条约';
+      case 'series':      return item.title || '一个系列';
+      case 'heartwords':  return item.title || _trim(item.content, 12) || '一封情书';
+      case 'questions':   return _trim(item.question, 12) || '一个问题';
+      case 'suggestions': return _trim(item.content, 12) || '一条建议';
+      case 'reflections': return _trim(item.content, 12) || '一段独白';
+      case 'photos':      return '一张照片';
+      default:            return '一条记录';
+    }
+  }
+
+  function _seriesSnap(s) {
+    const inner = {};
+    if (s && Array.isArray(s.items)) {
+      s.items.forEach(it => { if (it && it.id != null) inner[it.id] = _itemHash(it); });
+    }
+    return { meta: _itemHash({ title: s && s.title, note: s && s.note }), items: inner };
   }
 
   function _buildSnapshot(d) {
-    const snap = {};
-    for (const k in DEFAULT_DATA) {
-      snap[k] = _fingerprint(d[k]);
+    const snap = { _modules: {} };
+    for (const k of Object.keys(DEFAULT_DATA)) {
+      const v = d[k];
+      if (k === 'series' && Array.isArray(v)) {
+        const map = {};
+        v.forEach(s => { if (s && s.id != null) map[s.id] = _seriesSnap(s); });
+        snap._modules[k] = { kind: 'series', map: map };
+      } else if (Array.isArray(v)) {
+        const map = {};
+        v.forEach(it => { if (it && it.id != null) map[it.id] = _itemHash(it); });
+        snap._modules[k] = { kind: 'array', map: map };
+      } else {
+        snap._modules[k] = { kind: 'scalar', hash: _itemHash(v) };
+      }
     }
     return snap;
+  }
+
+  function _diffSnapshots(oldSnap, newSnap, d) {
+    const oldMods = (oldSnap && oldSnap._modules) || {};
+    const results = [];
+    for (const k of Object.keys(newSnap._modules)) {
+      const oldM = oldMods[k];
+      const newM = newSnap._modules[k];
+      if (!oldM) continue;
+      const label = MODULE_LABELS[k] || k;
+      const changes = [];
+
+      if (newM.kind === 'scalar') {
+        if (oldM.hash !== newM.hash) changes.push({ type: 'modify', name: label });
+      } else if (newM.kind === 'array') {
+        const arr = Array.isArray(d[k]) ? d[k] : [];
+        const byId = new Map(arr.map(it => [String(it.id), it]));
+        Object.keys(newM.map).forEach(id => {
+          if (!(id in oldM.map)) changes.push({ type: 'add', name: _itemSummary(k, byId.get(id)) });
+          else if (oldM.map[id] !== newM.map[id]) changes.push({ type: 'modify', name: _itemSummary(k, byId.get(id)) });
+        });
+        Object.keys(oldM.map).forEach(id => {
+          if (!(id in newM.map)) changes.push({ type: 'remove', name: '一条记录' });
+        });
+      } else if (newM.kind === 'series') {
+        const arr = Array.isArray(d[k]) ? d[k] : [];
+        const byId = new Map(arr.map(s => [String(s.id), s]));
+        Object.keys(newM.map).forEach(id => {
+          const series = byId.get(id);
+          const sName = series && series.title ? series.title : '一个系列';
+          if (!(id in oldM.map)) { changes.push({ type: 'add', name: sName }); return; }
+          const oldS = oldM.map[id], newS = newM.map[id];
+          if (oldS.meta !== newS.meta) changes.push({ type: 'modify', name: sName });
+          const inner = (series && Array.isArray(series.items)) ? series.items : [];
+          const innerById = new Map(inner.map(it => [String(it.id), it]));
+          Object.keys(newS.items).forEach(iid => {
+            const itTitle = (innerById.get(iid) && innerById.get(iid).title) || '一条记录';
+            if (!(iid in oldS.items)) changes.push({ type: 'add', name: sName + ' · ' + itTitle });
+            else if (oldS.items[iid] !== newS.items[iid]) changes.push({ type: 'modify', name: sName + ' · ' + itTitle });
+          });
+          Object.keys(oldS.items).forEach(iid => {
+            if (!(iid in newS.items)) changes.push({ type: 'remove', name: sName + ' · 一条记录' });
+          });
+        });
+        Object.keys(oldM.map).forEach(id => {
+          if (!(id in newM.map)) changes.push({ type: 'remove', name: '一个系列' });
+        });
+      }
+
+      if (changes.length) results.push({ module: label, key: k, changes: changes });
+    }
+    return results;
   }
 
   function saveSnapshot(d) {
@@ -315,11 +417,7 @@ const Store = (() => {
       if (!raw) return [];
       const oldSnap = JSON.parse(raw);
       const newSnap = _buildSnapshot(d);
-      const changed = [];
-      for (const k in newSnap) {
-        if (oldSnap[k] !== newSnap[k]) changed.push(MODULE_LABELS[k] || k);
-      }
-      return changed;
+      return _diffSnapshots(oldSnap, newSnap, d);
     } catch (_) { return []; }
   }
 

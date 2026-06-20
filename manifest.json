@@ -8,7 +8,7 @@
   "background_color": "#faf5f0",
   "theme_color": "#d4726a",
   "orientation": "portrait",
-  "version": "20260616",
+  "version": "20260620",
   "icons": [
     {
       "src": "icons/favicon.svg",

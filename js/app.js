@@ -124,7 +124,16 @@ const App = (() => {
 
     const changedModules = Store.detectChanges(data);
     Store.saveSnapshot(data);
-    Store.subscribe(newData => { data = newData; Store.saveSnapshot(data); renderNav(); render(); });
+    Store.subscribe(newData => {
+      const incoming = Store.detectChanges(newData);
+      data = newData;
+      Store.saveSnapshot(data);
+      renderNav();
+      render();
+      if (incoming.length > 0) {
+        setTimeout(() => _showChangeNotification(incoming), 200);
+      }
+    });
     renderNav();
     render();
     scheduleMidnightRefresh();
@@ -353,7 +362,7 @@ const App = (() => {
       return { ...ms, _next: next, _days: next ? diffDays(today0(), next) : 9999 };
     }).sort((a, b) => a._days - b._days);
 
-    if (!items.length) return `<div class="ms-hero"><div class="ms-hero__days" style="font-size:1.5rem;color:var(--text3)">暂无节点</div></div>` + addBtn('添加节点', 'editMilestone()');
+    if (!items.length) return `<div class="ms-hero"><div class="ms-hero__days" style="font-size:1.5rem;color:var(--text3)">还没有值得标记的日子</div></div>` + addBtn('添加节点', 'editMilestone()');
 
     const first = items[0], rest = items.slice(1);
     let html = `<div class="ms-hero"><div class="ms-hero__label">距离下一个节点</div><div class="ms-hero__title">${esc(first.title)}</div><div class="ms-hero__days">${first._days === 0 ? '今天！' : first._days + ' 天'}</div><div class="ms-hero__date">${first.isLunar ? '农历' : '公历'} ${first.month}月${first.day}日 · 下次 ${fmtNextDate(first._next)}</div><div class="ms-hero__actions"><button onclick="App.editMilestone(${first.id})">编辑</button><button class="del" onclick="App.del('milestones',${first.id})">删除</button></div></div>`;
@@ -386,7 +395,7 @@ const App = (() => {
 
   function renderDates() {
     const items = (data.dates || []).slice().sort((a, b) => b.date.localeCompare(a.date));
-    if (!items.length) return addBtn('添加约会', 'editDate()') + empty('还没有约会记录');
+    if (!items.length) return addBtn('添加约会', 'editDate()') + empty('第一次相遇，等你写下');
     const countHtml = `<div class="dates-header"><div class="dates-header__count">共记录了 <strong>${items.length}</strong> 次约会</div></div>`;
     return addBtn('添加约会', 'editDate()') + countHtml + items.map(i => {
       const isRange = !!(i.dateEnd && i.dateEnd !== i.date);
@@ -416,7 +425,7 @@ const App = (() => {
       <div id="dateEndWrap" style="${isRange ? '' : 'display:none'}">
         <label>结束日期</label><input type="date" id="f_dateEnd" value="${item.dateEnd || ''}">
       </div>
-      <label>事件</label><input id="f_event" value="${esc(item.event)}" placeholder="约会事件">
+      <label>事件</label><input id="f_event" value="${esc(item.event)}" placeholder="例：去公园散步">
       <label>备注</label><textarea id="f_note">${esc(item.note)}</textarea>
       <div class="modal__footer"><button class="btn-primary" onclick="App.saveDate(${id || 0})">保存</button></div>`);
   }
@@ -438,7 +447,7 @@ const App = (() => {
       `<div class="note-slip note-colors-${idx % 6}" onclick="App.viewPlan(${p.id})">${esc(p.title)}</div>`
     ).join('');
 
-    const bottle = `<div class="bottle-scene"><div class="bottle"><div class="bottle__cork"></div>${slips || '<div class="empty" style="padding:2rem 0;font-size:.8rem">瓶子是空的，放入第一张纸条吧</div>'}</div><button class="bottle-add" onclick="App.editPlan()">+ 塞入纸条</button></div>`;
+    const bottle = `<div class="bottle-scene"><div class="bottle"><div class="bottle__cork"></div>${slips || '<div class="empty" style="padding:2rem 0;font-size:.8rem">瓶子还空着，等你放进第一个心愿</div>'}</div><button class="bottle-add" onclick="App.editPlan()">+ 塞入纸条</button></div>`;
 
     let archive = '';
     if (archived.length) {
@@ -456,7 +465,7 @@ const App = (() => {
         </div>`;
       }).join('');
       archive = `<details class="plans-archive" open>
-        <summary><span>已实现的心愿</span><span class="plans-archive__count">${archived.length}</span></summary>
+        <summary><span>已实现的心愿</span></summary>
         <div class="plans-archive__hint">那些被我们一起完成的事 &#10084;</div>
         <div class="plans-archive__list">${items}</div>
       </details>`;
@@ -473,7 +482,7 @@ const App = (() => {
   function editPlan(id) {
     const item = id ? (data.plans || []).find(i => i.id === id) : { title: '', type: 'short', done: false, note: '' };
     showModal(id ? '编辑纸条' : '写一张纸条', `
-      <label>内容</label><input id="f_title" value="${esc(item.title)}" placeholder="想一起做的事">
+      <label>内容</label><input id="f_title" value="${esc(item.title)}" placeholder="例：一起看一次海">
       <label>类型</label><select id="f_type"><option value="short" ${item.type === 'short' ? 'selected' : ''}>短期</option><option value="long" ${item.type === 'long' ? 'selected' : ''}>长期</option></select>
       <label>备注</label><textarea id="f_note">${esc(item.note)}</textarea>
       <div class="modal__footer"><button class="btn-primary" onclick="App.savePlan(${id || 0})">塞入瓶子</button></div>`);
@@ -503,7 +512,7 @@ const App = (() => {
       : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
     let header = `<div class="treaty-header"><div class="treaty-header__icon">&#128220;</div><div class="treaty-header__title">${esc(data.couple.nameA || '我')} & ${esc(data.couple.nameB || '你')} 的恋爱条约</div><div class="treaty-header__count">共 ${items.length} 条主条约${subCount ? '，' + subCount + ' 条子条约' : ''}</div>${items.length ? `<button class="treaty-mode-btn" onclick="App.toggleTreatyMode()">${modeIcon}<span>${modeLabel}</span></button>` : ''}</div>`;
 
-    if (!items.length) return header + empty('还没有条约，一起制定属于你们的约定吧') + addBtn('添加条款', 'editTreaty()');
+    if (!items.length) return header + empty('约定还没开始，等你们写下第一条') + addBtn('添加条款', 'editTreaty()');
 
     let list = `<div class="treaty-list ${modeClass}" id="treatyList">` + items.map((t, idx) => {
       const children = t.children || [];
@@ -545,7 +554,7 @@ const App = (() => {
     const item = id ? (data.treaties || []).find(i => i.id === id) : { content: '' };
     showModal(id ? '编辑条款' : '添加条款', `
       <label>条款内容</label>
-      <textarea id="f_content" style="min-height:100px" placeholder="写下你们的约定">${esc(item.content)}</textarea>
+      <textarea id="f_content" style="min-height:100px" placeholder="输入条款内容">${esc(item.content)}</textarea>
       <div class="hint-text">参考：不许和异性单独吃饭 / 吵架不过夜 / 每周至少约会一次 / 重要节日必须一起过 / 手机可以互相看</div>
       <div class="modal__footer"><button class="btn-primary" onclick="App.saveTreaty(${id || 0})">保存</button></div>`);
   }
@@ -570,7 +579,7 @@ const App = (() => {
       <label>所属主条约</label>
       <div style="font-size:.85rem;color:var(--text2);padding:.4rem .6rem;background:var(--surface2);border-radius:8px;margin-bottom:.4rem">${esc(parent.content)}</div>
       <label>子条约内容</label>
-      <textarea id="f_sub_content" style="min-height:80px" placeholder="补充细则">${esc(child.content)}</textarea>
+      <textarea id="f_sub_content" style="min-height:80px" placeholder="输入子条款内容">${esc(child.content)}</textarea>
       <div class="modal__footer"><button class="btn-primary" onclick="App.saveSubTreaty(${parentId},${childId || 0})">保存</button></div>`);
   }
 
@@ -599,7 +608,7 @@ const App = (() => {
 
   function renderMore() {
     const mods = getMoreModules();
-    if (!mods.length) return empty('所有功能已在底部导航栏显示');
+    if (!mods.length) return empty('所有去处都在指尖');
     return `<div class="more-grid">${mods.map(mod =>
       `<div class="more-item" onclick="App.goTab('${mod.key}')"><div class="more-item__icon">${mod.emoji}</div><div class="more-item__label">${mod.label}</div></div>`
     ).join('')}</div>`;
@@ -609,8 +618,8 @@ const App = (() => {
 
   function renderMemo() {
     const items = (data.memos || []).slice().sort((a, b) => b.id - a.id);
-    if (!items.length) return empty('对方的喜好、家里的密码、重要的事都放这') + addBtn('添加备忘', 'editMemo()');
-    return items.map(i => `<div class="card" onclick="App.viewMemo(${i.id})"><div class="card__title">${esc(i.title)}</div>${i.description ? `<div class="card__note">${esc(i.description)}</div>` : ''}${actionBtns(`editMemo(${i.id})`, `del('memos',${i.id})`)}</div>`).join('') + addBtn('添加备忘', 'editMemo()');
+    if (!items.length) return addBtn('添加备忘', 'editMemo()') + empty('那些不愿忘记的小事，都收在这里');
+    return addBtn('添加备忘', 'editMemo()') + items.map(i => `<div class="card" onclick="App.viewMemo(${i.id})"><div class="card__title">${esc(i.title)}</div>${i.description ? `<div class="card__note">${esc(i.description)}</div>` : ''}${actionBtns(`editMemo(${i.id})`, `del('memos',${i.id})`)}</div>`).join('');
   }
 
   function viewMemo(id) {
@@ -621,9 +630,9 @@ const App = (() => {
   function editMemo(id) {
     const item = id ? (data.memos || []).find(i => i.id === id) : { title: '', description: '', content: '' };
     showModal(id ? '编辑备忘' : '添加备忘', `
-      <label>标题</label><input id="f_title" value="${esc(item.title)}" placeholder="例：共同银行卡号">
+      <label>标题</label><input id="f_title" value="${esc(item.title)}" placeholder="例：共同银行卡密码">
       <div class="hint-text">例：共同银行卡号 / 对方衣服尺码 / WiFi密码 / 家务排班 / 常用地址</div>
-      <label>介绍</label><textarea id="f_description" style="min-height:60px" placeholder="简要描述这条备忘的用途或说明">${esc(item.description || '')}</textarea>
+      <label>介绍</label><textarea id="f_description" style="min-height:60px" placeholder="简要描述用途（可选）">${esc(item.description || '')}</textarea>
       <label>内容</label><textarea id="f_content" style="min-height:120px">${esc(item.content)}</textarea>
       <div class="modal__footer"><button class="btn-primary" onclick="App.saveMemo(${id || 0})">保存</button></div>`);
   }
@@ -635,34 +644,157 @@ const App = (() => {
 
   /* ===== TRAVEL ===== */
 
+  const TRAVEL_CITIES = {
+    '北京': [116.40, 39.90], '上海': [121.47, 31.23], '天津': [117.20, 39.13], '重庆': [106.55, 29.57],
+    '哈尔滨': [126.66, 45.74], '长春': [125.32, 43.82], '沈阳': [123.43, 41.81], '大连': [121.62, 38.92],
+    '石家庄': [114.51, 38.04], '太原': [112.55, 37.87], '呼和浩特': [111.74, 40.84],
+    '济南': [117.00, 36.65], '青岛': [120.38, 36.07], '烟台': [121.39, 37.54], '潍坊': [119.10, 36.71],
+    '南京': [118.78, 32.06], '苏州': [120.59, 31.30], '无锡': [120.30, 31.57], '常州': [119.95, 31.78], '徐州': [117.18, 34.26],
+    '杭州': [120.15, 30.27], '宁波': [121.55, 29.88], '温州': [120.65, 28.02], '绍兴': [120.58, 30.00], '嘉兴': [120.76, 30.77], '金华': [119.65, 29.08],
+    '合肥': [117.27, 31.86], '芜湖': [118.38, 31.33],
+    '福州': [119.30, 26.08], '厦门': [118.10, 24.46], '泉州': [118.67, 24.88],
+    '南昌': [115.89, 28.68],
+    '郑州': [113.62, 34.75], '洛阳': [112.45, 34.62], '开封': [114.34, 34.80],
+    '武汉': [114.30, 30.60], '宜昌': [111.29, 30.69],
+    '长沙': [112.94, 28.23], '株洲': [113.16, 27.83],
+    '广州': [113.27, 23.13], '深圳': [114.06, 22.55], '珠海': [113.57, 22.27], '东莞': [113.75, 23.05], '佛山': [113.13, 23.03], '中山': [113.39, 22.52], '惠州': [114.41, 23.11],
+    '南宁': [108.37, 22.82], '桂林': [110.30, 25.27], '北海': [109.12, 21.49],
+    '海口': [110.32, 20.03], '三亚': [109.51, 18.25],
+    '成都': [104.07, 30.67], '绵阳': [104.74, 31.46],
+    '贵阳': [106.71, 26.58],
+    '昆明': [102.83, 24.88], '大理': [100.23, 25.59], '丽江': [100.23, 26.86], '西双版纳': [100.79, 22.02],
+    '拉萨': [91.13, 29.65],
+    '西安': [108.94, 34.34],
+    '兰州': [103.83, 36.06], '西宁': [101.78, 36.62], '银川': [106.27, 38.47], '乌鲁木齐': [87.62, 43.83],
+    '台北': [121.50, 25.05], '香港': [114.17, 22.32], '澳门': [113.55, 22.20],
+    '唐山': [118.20, 39.63], '秦皇岛': [119.60, 39.93]
+  };
+
+  function _matchCity(text) {
+    if (!text) return '';
+    for (const name of Object.keys(TRAVEL_CITIES)) {
+      if (text.indexOf(name) !== -1) return name;
+    }
+    return '';
+  }
+
+  let _travelMap = null;
+  let _travelMapLoaded = false;
+  function _initTravelMap() {
+    const el = document.getElementById('travelMap');
+    if (!el || typeof echarts === 'undefined') return;
+    if (_travelMap) { try { _travelMap.dispose(); } catch (_) {} _travelMap = null; }
+    const items = (data.travels || []);
+    const points = items.map(t => {
+      const city = t.city || _matchCity(t.place);
+      const coord = TRAVEL_CITIES[city];
+      if (!coord) return null;
+      return { name: city, value: coord.concat(1), status: t.status || 'visited', note: t.note || '', date: t.date || '' };
+    }).filter(Boolean);
+    const draw = () => {
+      _travelMap = echarts.init(el);
+      _travelMap.setOption({
+        backgroundColor: 'transparent',
+        tooltip: {
+          trigger: 'item',
+          formatter: p => {
+            if (!p.data || !p.data.name) return '';
+            const tag = p.data.status === 'planned' ? '计划' : '已去';
+            const note = p.data.note ? '<br/>' + p.data.note : '';
+            const dt = p.data.date ? '<br/>' + p.data.date : '';
+            return '<b>' + p.data.name + '</b> · ' + tag + dt + note;
+          }
+        },
+        geo: {
+          map: 'china',
+          roam: true,
+          zoom: 1.1,
+          itemStyle: { areaColor: '#f6e9e3', borderColor: '#d4726a', borderWidth: 0.6 },
+          emphasis: { itemStyle: { areaColor: '#f2d9cf' }, label: { show: false } },
+          label: { show: false }
+        },
+        series: [
+          { name: '已去', type: 'scatter', coordinateSystem: 'geo',
+            data: points.filter(p => p.status === 'visited'),
+            symbolSize: 12,
+            itemStyle: { color: '#d4726a', shadowBlur: 8, shadowColor: 'rgba(212,114,106,.5)' },
+            label: { show: true, position: 'right', formatter: '{b}', fontSize: 11, color: '#6b3a35' } },
+          { name: '计划', type: 'scatter', coordinateSystem: 'geo',
+            data: points.filter(p => p.status === 'planned'),
+            symbolSize: 11,
+            itemStyle: { color: 'transparent', borderColor: '#3a7ab3', borderWidth: 2 },
+            label: { show: true, position: 'right', formatter: '{b}', fontSize: 11, color: '#3a5a7a' } }
+        ]
+      });
+    };
+    if (_travelMapLoaded) { draw(); return; }
+    fetch('https://geo.datav.aliyun.com/areas_v3/bound/100000_full.json')
+      .then(r => r.json())
+      .then(json => { echarts.registerMap('china', json); _travelMapLoaded = true; draw(); })
+      .catch(() => { el.innerHTML = '<div style="padding:1rem;text-align:center;color:var(--text3);font-size:.85rem">地图加载失败，请检查网络</div>'; });
+  }
+
   function renderTravel() {
-    const items = (data.travels || []).slice().sort((a, b) => b.date.localeCompare(a.date));
-    if (!items.length) return empty('记录你们一起走过的地方') + addBtn('添加足迹', 'editTravel()');
-    const summary = `<div style="text-align:center;padding:.8rem 0;font-size:.9rem;color:var(--text2)">已打卡 <strong style="color:var(--accent);font-size:1.2rem">${items.length}</strong> 个地方</div>`;
-    return summary + items.map(i => `<div class="travel-card"><div class="travel-card__place">${esc(i.place)}</div><div class="travel-card__date">${fmtDateRange(i)}</div>${i.note ? `<div class="travel-card__note">${esc(i.note)}</div>` : ''}${actionBtns(`editTravel(${i.id})`, `del('travels',${i.id})`)}</div>`).join('') + addBtn('添加足迹', 'editTravel()');
+    const items = (data.travels || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    const top = addBtn('标记城市', 'editTravel()');
+    if (!items.length) return top + empty('走过的每一寸土地，都值得被记住');
+    const visited = items.filter(i => (i.status || 'visited') === 'visited');
+    const planned = items.filter(i => i.status === 'planned');
+    const summary = `<div class="travel-summary"><span><strong style="color:#d4726a">${visited.length}</strong> 已去</span><span style="margin-left:1.2rem"><strong style="color:#3a7ab3">${planned.length}</strong> 计划</span></div>`;
+    const mapEl = `<div id="travelMap" class="travel-map"></div>`;
+    const renderList = (arr, label, accent) => {
+      if (!arr.length) return '';
+      return `<div class="travel-section"><div class="travel-section__title" style="border-left-color:${accent}">${label}</div>` + arr.map(i => {
+        const cityLabel = i.city || _matchCity(i.place) || i.place || '未识别地点';
+        return `<div class="travel-card"><div class="travel-card__place">${esc(cityLabel)}</div><div class="travel-card__date">${fmtDateRange(i)}</div>${i.note ? `<div class="travel-card__note">${esc(i.note)}</div>` : ''}${actionBtns(`editTravel(${i.id})`, `del('travels',${i.id})`)}</div>`;
+      }).join('') + `</div>`;
+    };
+    setTimeout(_initTravelMap, 0);
+    return top + summary + mapEl + renderList(visited, '已去的城市', '#d4726a') + renderList(planned, '计划要去', '#3a7ab3');
   }
 
   function editTravel(id) {
-    const item = id ? (data.travels || []).find(i => i.id === id) : { place: '', date: todayISO(), dateEnd: '', note: '' };
+    const item = id
+      ? (data.travels || []).find(i => i.id === id)
+      : { city: '', place: '', date: todayISO(), dateEnd: '', note: '', status: 'visited' };
     const isRange = !!(item.dateEnd && item.dateEnd !== item.date);
-    showModal(id ? '编辑足迹' : '添加足迹', `
-      <label>地点</label><input id="f_place" value="${esc(item.place)}" placeholder="城市或景点名称">
+    const currentCity = item.city || _matchCity(item.place) || '';
+    const cityOptions = Object.keys(TRAVEL_CITIES).sort().map(name =>
+      `<option value="${name}" ${name === currentCity ? 'selected' : ''}>${name}</option>`
+    ).join('');
+    showModal(id ? '编辑足迹' : '标记城市', `
+      <label>城市</label>
+      <select id="f_city"><option value="">— 请选择 —</option>${cityOptions}</select>
+      <label>状态</label>
+      <select id="f_status">
+        <option value="visited" ${item.status !== 'planned' ? 'selected' : ''}>已去</option>
+        <option value="planned" ${item.status === 'planned' ? 'selected' : ''}>计划</option>
+      </select>
       <label>时间类型</label>
       <select id="f_datetype" onchange="App.toggleDateRange()">
         <option value="point" ${!isRange ? 'selected' : ''}>单日</option>
         <option value="range" ${isRange ? 'selected' : ''}>时间段</option>
       </select>
-      <label>日期</label><input type="date" id="f_date" value="${item.date}">
+      <label>日期</label><input type="date" id="f_date" value="${item.date || todayISO()}">
       <div id="dateEndWrap" style="${isRange ? '' : 'display:none'}">
         <label>结束日期</label><input type="date" id="f_dateEnd" value="${item.dateEnd || ''}">
       </div>
-      <label>备注</label><textarea id="f_note">${esc(item.note)}</textarea>
+      <label>备注</label><textarea id="f_note">${esc(item.note || '')}</textarea>
       <div class="modal__footer"><button class="btn-primary" onclick="App.saveTravel(${id || 0})">保存</button></div>`);
   }
 
   function saveTravel(id) {
+    const city = v('f_city');
+    if (!city) { alert('请选择城市'); return; }
     const isRange = v('f_datetype') === 'range';
-    saveItem('travels', id, { place: v('f_place'), date: v('f_date'), dateEnd: isRange ? v('f_dateEnd') : '', note: v('f_note') });
+    saveItem('travels', id, {
+      city: city,
+      place: city,
+      status: v('f_status') || 'visited',
+      date: v('f_date'),
+      dateEnd: isRange ? v('f_dateEnd') : '',
+      note: v('f_note')
+    });
     closeModal(); render();
   }
 
@@ -670,11 +802,11 @@ const App = (() => {
 
   function renderSeries() {
     const items = (data.series || []).slice().sort((a, b) => b.id - a.id);
-    if (!items.length) return empty('创建「电影系列」「美食探店」等专属合集') + addBtn('添加系列', 'editSeriesTitle()');
-    return items.map(i => {
+    if (!items.length) return addBtn('添加系列', 'editSeriesTitle()') + empty('把喜欢的事，一类一类收成集');
+    return addBtn('添加系列', 'editSeriesTitle()') + items.map(i => {
       const cnt = (i.items || []).length;
       return `<div class="series-card" onclick="App.goSub('seriesDetail',${i.id})"><div><div class="series-card__title">${esc(i.title)}</div><div class="series-card__count">${cnt} 条记录${i.note ? ' · ' + esc(i.note) : ''}</div></div><span class="series-card__arrow">&rsaquo;</span></div>`;
-    }).join('') + addBtn('添加系列', 'editSeriesTitle()');
+    }).join('');
   }
 
   function editSeriesTitle(id) {
@@ -704,12 +836,12 @@ const App = (() => {
 
   function renderSeriesDetail() {
     const s = (data.series || []).find(i => i.id === currentSeriesId);
-    if (!s) return empty('系列不存在');
+    if (!s) return empty('这本合集已经合上了');
     let html = `<div style="margin-bottom:.8rem"><div style="font-size:1.1rem;font-weight:700">${esc(s.title)}</div>${s.note ? `<div style="font-size:.82rem;color:var(--text2);margin-top:.2rem">${esc(s.note)}</div>` : ''}<button class="btn-secondary" style="margin-top:.4rem;font-size:.75rem;padding:.3rem .8rem" onclick="App.editSeriesTitle(${s.id})">编辑系列</button></div>`;
-    const items = (s.items || []).slice().sort(sortDesc);
-    if (!items.length) html += empty('暂无记录');
-    items.forEach(i => { html += `<div class="series-detail-item"><div class="card__date" style="margin-bottom:.2rem">${fmtDate(i.date)}</div><div class="card__title">${esc(i.title)}</div>${i.content ? `<div class="card__note">${esc(i.content)}</div>` : ''}${actionBtns(`editSeriesItem(${s.id},${i.id})`, `delSeriesItem(${s.id},${i.id})`)}</div>`; });
     html += addBtn('添加记录', `editSeriesItem(${s.id})`);
+    const items = (s.items || []).slice().sort(sortDesc);
+    if (!items.length) html += empty('这里还很安静');
+    items.forEach(i => { html += `<div class="series-detail-item"><div class="card__date" style="margin-bottom:.2rem">${fmtDate(i.date)}</div><div class="card__title">${esc(i.title)}</div>${i.content ? `<div class="card__note">${esc(i.content)}</div>` : ''}${actionBtns(`editSeriesItem(${s.id},${i.id})`, `delSeriesItem(${s.id},${i.id})`)}</div>`; });
     return html;
   }
 
@@ -717,7 +849,7 @@ const App = (() => {
     const s = (data.series || []).find(i => i.id === seriesId); if (!s) return;
     const item = itemId ? (s.items || []).find(i => i.id === itemId) : { title: '', date: todayISO(), content: '' };
     showModal(itemId ? '编辑记录' : '添加记录', `
-      <label>标题</label><input id="f_title" value="${esc(item.title)}" placeholder="记录标题">
+      <label>标题</label><input id="f_title" value="${esc(item.title)}" placeholder="输入记录标题">
       <label>日期</label><input type="date" id="f_date" value="${item.date}">
       <label>内容</label><textarea id="f_content">${esc(item.content)}</textarea>
       <div class="modal__footer"><button class="btn-primary" onclick="App.saveSeriesItem(${seriesId},${itemId || 0})">保存</button></div>`);
@@ -742,7 +874,7 @@ const App = (() => {
 
   function renderHeartwords() {
     const items = (data.heartwords || []).slice().sort(sortDesc);
-    if (!items.length) return empty('写下想对 TA 说的心里话，让文字传递真心') + addBtn('写情书', 'editHeartword()');
+    if (!items.length) return empty('有些话，写下来才说得出口') + addBtn('写情书', 'editHeartword()');
     return addBtn('写情书', 'editHeartword()') + `<div class="preview-list">${items.map(i => `<div class="preview-card preview-card--heartword" onclick="App.viewHeartword(${i.id})">
         <div class="preview-card__icon">&#128140;</div>
         <div class="preview-card__body">
@@ -773,7 +905,7 @@ const App = (() => {
     const item = id ? (data.heartwords || []).find(i => i.id === id) : { content: '', date: todayISO(), author: '' };
     showModal(id ? '编辑情书' : '写情书', `
       <label>想对 TA 说的话</label>
-      <textarea id="f_content" style="min-height:120px" placeholder="把心里话写在这里…">${esc(item.content)}</textarea>
+      <textarea id="f_content" style="min-height:120px" placeholder="输入正文">${esc(item.content)}</textarea>
       <label>署名</label><select id="f_author">${nameOptionsRequired(item.author)}</select>
       <label>日期</label><input type="date" id="f_date" value="${item.date}">
       <div class="modal__footer"><button class="btn-primary" onclick="App.saveHeartword(${id || 0})">保存</button></div>`);
@@ -788,7 +920,7 @@ const App = (() => {
 
   function renderQuestions() {
     const items = (data.questions || []).slice().sort(sortDesc);
-    if (!items.length) return empty('写下想问对方的问题，期待 TA 的真实回答') + addBtn('提个问题', 'editQuestion()');
+    if (!items.length) return empty('有些好奇，已经藏了很久') + addBtn('提个问题', 'editQuestion()');
     return addBtn('提个问题', 'editQuestion()') + `<div class="preview-list">${items.map(i => {
       const hasAnswer = !!(i.answer && i.answer.trim());
       return `<div class="preview-card preview-card--question ${hasAnswer ? 'answered' : ''}" onclick="App.viewQuestion(${i.id})">
@@ -829,7 +961,7 @@ const App = (() => {
     const item = id ? (data.questions || []).find(i => i.id === id) : { question: '', date: todayISO(), asker: '', answer: '' };
     showModal(id ? '编辑问题' : '提个问题', `
       <label>你的问题</label>
-      <textarea id="f_question" style="min-height:80px" placeholder="写下想问对方的问题…">${esc(item.question)}</textarea>
+      <textarea id="f_question" style="min-height:80px" placeholder="输入问题">${esc(item.question)}</textarea>
       <label>提问者</label><select id="f_asker">${nameOptionsRequired(item.asker)}</select>
       <label>日期</label><input type="date" id="f_date" value="${item.date}">
       <div class="modal__footer"><button class="btn-primary" onclick="App.saveQuestion(${id || 0})">保存</button></div>`);
@@ -847,7 +979,7 @@ const App = (() => {
     showModal('回答问题', `
       <div style="font-size:.9rem;color:var(--text2);padding:.6rem;background:var(--surface2);border-radius:8px;margin-bottom:.6rem"><strong>问：</strong>${esc(item.question)}</div>
       <label>你的回答</label>
-      <textarea id="f_answer" style="min-height:100px" placeholder="写下你的真实回答…">${esc(item.answer || '')}</textarea>
+      <textarea id="f_answer" style="min-height:100px" placeholder="输入回答">${esc(item.answer || '')}</textarea>
       <div class="modal__footer"><button class="btn-primary" onclick="App.saveAnswer(${id})">保存回答</button></div>`);
   }
 
@@ -861,7 +993,7 @@ const App = (() => {
 
   function renderSuggestions() {
     const items = (data.suggestions || []).slice().sort(sortDesc);
-    if (!items.length) return empty('每一次沟通，都是更靠近你') + addBtn('写建议', 'editSuggestion()');
+    if (!items.length) return empty('那些没说出口的话，先放在这里') + addBtn('写建议', 'editSuggestion()');
     return addBtn('写建议', 'editSuggestion()') + `<div class="preview-list">${items.map(i => {
       const st = i.response ? 'responded' : (i.read ? 'read' : 'unread');
       const stLabel = i.response ? '已回应' : (i.read ? '已读' : '未读');
@@ -915,7 +1047,7 @@ const App = (() => {
     const toVal = item.to || nameB;
     showModal(id ? '编辑建议' : '写建议', `
       <label>建议内容</label>
-      <textarea id="f_content" style="min-height:100px" placeholder="写下你对 TA 的相处建议…">${esc(item.content)}</textarea>
+      <textarea id="f_content" style="min-height:100px" placeholder="输入建议内容">${esc(item.content)}</textarea>
       <label>提出者</label><select id="f_from" onchange="App.syncSuggestionTo()">
         <option value="${esc(nameA)}" ${fromVal === nameA ? 'selected' : ''}>${esc(nameA)}</option>
         ${nameB ? `<option value="${esc(nameB)}" ${fromVal === nameB ? 'selected' : ''}>${esc(nameB)}</option>` : ''}
@@ -964,7 +1096,7 @@ const App = (() => {
     showModal('回应建议', `
       <div style="font-size:.9rem;color:var(--text2);padding:.6rem;background:var(--surface2);border-radius:8px;margin-bottom:.6rem"><strong>${esc(item.from)} 说：</strong>${esc(item.content)}</div>
       <label>你的回应</label>
-      <textarea id="f_response" style="min-height:100px" placeholder="写下你的想法…">${esc(item.response || '')}</textarea>
+      <textarea id="f_response" style="min-height:100px" placeholder="输入回应">${esc(item.response || '')}</textarea>
       <div class="modal__footer"><button class="btn-primary" onclick="App.saveResponse(${id})">保存回应</button></div>`);
   }
 
@@ -979,7 +1111,7 @@ const App = (() => {
 
   function renderReflections() {
     const items = (data.reflections || []).slice().sort(sortDesc);
-    if (!items.length) return empty('一支羽毛笔，写给自己的话。允许沉默，也允许被 TA 看见。') + addBtn('写一段自省独白', 'editReflection()');
+    if (!items.length) return empty('那些被河流带走的话，先写给自己听') + addBtn('写一段自省独白', 'editReflection()');
     return addBtn('写一段自省独白', 'editReflection()') + `<div class="preview-list">${items.map(i => {
       const seen = !!(i.seenBy);
       return `<div class="preview-card preview-card--reflect ${seen ? 'seen' : ''}" onclick="App.viewReflection(${i.id})">
@@ -1021,7 +1153,7 @@ const App = (() => {
     const item = id ? (data.reflections || []).find(i => i.id === id) : { content: '', date: todayISO(), author: '' };
     showModal(id ? '编辑自省独白' : '写一段自省独白', `
       <label>想对自己说的话</label>
-      <textarea id="f_content" style="min-height:130px" placeholder="把心里想了很久的话写出来…">${esc(item.content)}</textarea>
+      <textarea id="f_content" style="min-height:130px" placeholder="输入独白内容">${esc(item.content)}</textarea>
       <label>署名</label><select id="f_author">${nameOptionsRequired(item.author)}</select>
       <label>日期</label><input type="date" id="f_date" value="${item.date}">
       <div class="modal__footer"><button class="btn-primary" onclick="App.saveReflection(${id || 0})">保存</button></div>`);
@@ -1053,7 +1185,7 @@ const App = (() => {
       <div style="font-size:.88rem;color:var(--text2);padding:.6rem;background:var(--surface2);border-radius:8px;margin-bottom:.6rem;line-height:1.55">${esc(item.content)}</div>
       <label>署名</label><select id="f_seen_by">${opts}</select>
       <label>想说一句（可选）</label>
-      <input id="f_seen_note" placeholder="例：看到了&middot;抱抱你">
+      <input id="f_seen_note" placeholder="例：看到了">
       <div class="modal__footer"><button class="btn-primary" onclick="App.confirmReflectionSeen(${id})">确认看到</button></div>`);
   }
 
@@ -1140,12 +1272,20 @@ const App = (() => {
 
   /* ===== 数据导入导出 ===== */
 
-  function _showChangeNotification(modules) {
-    const listHtml = modules.map(m =>
-      `<div style="display:flex;align-items:center;gap:.5rem;padding:.45rem .7rem;background:var(--surface2);border-radius:8px;font-size:.88rem"><span style="color:var(--accent);font-size:1rem">&#8226;</span><span>${m}</span></div>`
-    ).join('');
+  function _showChangeNotification(groups) {
+    if (!groups || !groups.length) return;
+    const actionLabel = { add: '新增', modify: '修改', remove: '删除' };
+    const actionBg = { add: '#27ae60', modify: 'var(--accent)', remove: '#c0392b' };
+    const listHtml = groups.map(g => {
+      const lis = g.changes.map(c => {
+        const tag = actionLabel[c.type] || c.type;
+        const bg = actionBg[c.type] || '#888';
+        return `<li style="font-size:.84rem;color:var(--text2);display:flex;gap:.4rem;align-items:center;line-height:1.5"><span style="display:inline-block;font-size:.7rem;padding:.06rem .4rem;border-radius:6px;color:#fff;background:${bg};flex-shrink:0">${tag}</span><span style="word-break:break-all">${esc(c.name)}</span></li>`;
+      }).join('');
+      return `<div style="background:var(--surface2);border-radius:8px;padding:.5rem .7rem"><div style="font-weight:700;font-size:.9rem;margin-bottom:.35rem">${esc(g.module)}</div><ul style="list-style:none;padding-left:0;margin:0;display:flex;flex-direction:column;gap:.28rem">${lis}</ul></div>`;
+    }).join('');
     showModal('内容更新提醒',
-      `<div style="padding:.5rem 0"><p style="font-size:.88rem;color:var(--text2);margin-bottom:.8rem;line-height:1.5">你不在的时候，对方更新了以下内容：</p><div style="display:flex;flex-direction:column;gap:.4rem">${listHtml}</div></div><div class="modal__footer"><button class="btn-primary" onclick="App.closeModal()">知道了</button></div>`);
+      `<div style="padding:.5rem 0"><p style="font-size:.88rem;color:var(--text2);margin-bottom:.8rem;line-height:1.5">对方在你不在的时候，做了这些改动：</p><div style="display:flex;flex-direction:column;gap:.5rem">${listHtml}</div></div><div class="modal__footer"><button class="btn-primary" onclick="App.closeModal()">知道了</button></div>`);
   }
 
   async function handleImport(e) {
