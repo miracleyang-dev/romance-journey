@@ -46,13 +46,13 @@
 
 ```
 index.html           入口和 UI 容器
-sw.js                Service Worker：版本化缓存 + 离线降级 + 旧缓存清理
 css/style.css        样式与主题
 js/app.js            应用主逻辑与页面渲染
 js/auth.js           登录、注册、配对、退出
 js/store.js          Supabase 持久化、同步、图片上传、变更检测
 js/lunar.js          农历公历换算
 js/config.js         Supabase 连接配置
+js/sw.js             Service Worker：版本化缓存 + 离线降级 + 旧缓存清理（注册时 scope:'/'）
 manifest.json        PWA 清单（含 any / maskable 双图标）
 icons/favicon.svg            站点 SVG 矢量图标
 icons/apple-touch-icon.png   iOS 主屏图标（180×180）
@@ -70,7 +70,7 @@ Dockerfile           Nginx 静态部署
 为了避免「旧 Service Worker / 旧静态资源覆盖新版」，本项目使用 **发版日期** 作为版本号：
 
 - `index.html` 中所有 `?v=YYYYMMDD` 查询字符串；
-- `sw.js` 顶部的 `APP_VERSION = 'YYYYMMDD'`，决定 `CACHE_NAME`；
+- `js/sw.js` 顶部的 `APP_VERSION = 'YYYYMMDD'`，决定 `CACHE_NAME`；
 - `manifest.json` 中的 `version` 字段。
 
 三处保持一致即可。同一天多次发版可以追加 `-HHMM`（例如 `20260616-1830`）。

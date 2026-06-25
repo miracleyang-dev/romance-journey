@@ -680,10 +680,53 @@ const App = (() => {
 
   let _travelMap = null;
   let _travelMapLoaded = false;
+  let _travelMapLoading = null;
+  let _travelResizeObs = null;
+  let _travelInitTimer = null;
+  const TRAVEL_GEO_URLS = [
+    'https://geo.datav.aliyun.com/areas_v3/bound/100000_full.json',
+    'https://geojson.cn/api/china/china.json',
+    'https://cdn.jsdelivr.net/gh/echarts-maps/echarts-china-cities-js@1.0.0/china.json'
+  ];
+  function _travelShowMsg(el, msg) {
+    if (!el) return;
+    el.innerHTML = '<div class="travel-map__msg">' + esc(msg) + '</div>';
+  }
+  function _loadChinaGeo() {
+    if (_travelMapLoaded) return Promise.resolve();
+    if (_travelMapLoading) return _travelMapLoading;
+    const tryUrl = (i) => {
+      if (i >= TRAVEL_GEO_URLS.length) return Promise.reject(new Error('all geo sources failed'));
+      return fetch(TRAVEL_GEO_URLS[i], { cache: 'force-cache' })
+        .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
+        .then(json => {
+          if (!json || !json.features) throw new Error('invalid geojson');
+          echarts.registerMap('china', json);
+          _travelMapLoaded = true;
+        })
+        .catch(() => tryUrl(i + 1));
+    };
+    _travelMapLoading = tryUrl(0).finally(() => { _travelMapLoading = null; });
+    return _travelMapLoading;
+  }
   function _initTravelMap() {
     const el = document.getElementById('travelMap');
-    if (!el || typeof echarts === 'undefined') return;
+    if (!el) return;
+    if (typeof echarts === 'undefined') {
+      _travelShowMsg(el, 'ECharts 加载失败，请检查网络后刷新');
+      return;
+    }
+    // 销毁旧实例，避免重复 init
     if (_travelMap) { try { _travelMap.dispose(); } catch (_) {} _travelMap = null; }
+    if (_travelResizeObs) { try { _travelResizeObs.disconnect(); } catch (_) {} _travelResizeObs = null; }
+    if (_travelInitTimer) { clearTimeout(_travelInitTimer); _travelInitTimer = null; }
+
+    // 容器宽高为 0 时延后重试（切 Tab 回来 / 父级未渲染完成时常见）
+    if (!el.offsetWidth || !el.offsetHeight) {
+      _travelInitTimer = setTimeout(_initTravelMap, 60);
+      return;
+    }
+
     const items = (data.travels || []);
     const points = items.map(t => {
       const city = t.city || _matchCity(t.place);
@@ -691,8 +734,21 @@ const App = (() => {
       if (!coord) return null;
       return { name: city, value: coord.concat(1), status: t.status || 'visited', note: t.note || '', date: t.date || '' };
     }).filter(Boolean);
+
     const draw = () => {
-      _travelMap = echarts.init(el);
+      // 二次校验：异步回来后 DOM 可能已被替换
+      const cur = document.getElementById('travelMap');
+      if (!cur) return;
+      if (!cur.offsetWidth || !cur.offsetHeight) {
+        _travelInitTimer = setTimeout(_initTravelMap, 60);
+        return;
+      }
+      try {
+        _travelMap = echarts.init(cur);
+      } catch (e) {
+        _travelShowMsg(cur, '地图初始化失败');
+        return;
+      }
       _travelMap.setOption({
         backgroundColor: 'transparent',
         tooltip: {
@@ -726,12 +782,18 @@ const App = (() => {
             label: { show: true, position: 'right', formatter: '{b}', fontSize: 11, color: '#3a5a7a' } }
         ]
       });
+      // 容器尺寸变化时自适应（旋屏、键盘弹起、Tab 切换等场景）
+      if (typeof ResizeObserver !== 'undefined') {
+        _travelResizeObs = new ResizeObserver(() => {
+          if (_travelMap) { try { _travelMap.resize(); } catch (_) {} }
+        });
+        _travelResizeObs.observe(cur);
+      }
     };
-    if (_travelMapLoaded) { draw(); return; }
-    fetch('https://geo.datav.aliyun.com/areas_v3/bound/100000_full.json')
-      .then(r => r.json())
-      .then(json => { echarts.registerMap('china', json); _travelMapLoaded = true; draw(); })
-      .catch(() => { el.innerHTML = '<div style="padding:1rem;text-align:center;color:var(--text3);font-size:.85rem">地图加载失败，请检查网络</div>'; });
+
+    _loadChinaGeo()
+      .then(draw)
+      .catch(() => _travelShowMsg(el, '地图加载失败，请检查网络后刷新'));
   }
 
   function renderTravel() {
@@ -742,15 +804,31 @@ const App = (() => {
     const planned = items.filter(i => i.status === 'planned');
     const summary = `<div class="travel-summary"><span><strong style="color:#d4726a">${visited.length}</strong> 已去</span><span style="margin-left:1.2rem"><strong style="color:#3a7ab3">${planned.length}</strong> 计划</span></div>`;
     const mapEl = `<div id="travelMap" class="travel-map"></div>`;
-    const renderList = (arr, label, accent) => {
+    // 计划要去：紧凑横向 chip，置于「已去」之前，移动端更易触达
+    const renderPlanned = (arr) => {
       if (!arr.length) return '';
-      return `<div class="travel-section"><div class="travel-section__title" style="border-left-color:${accent}">${label}</div>` + arr.map(i => {
+      const chips = arr.map(i => {
+        const cityLabel = i.city || _matchCity(i.place) || i.place || '未识别地点';
+        const meta = fmtDateRange(i) || (i.note ? esc(i.note) : '期待出发');
+        return `<div class="planned-chip" onclick="App.editTravel(${i.id})">
+          <span class="planned-chip__city">${esc(cityLabel)}</span>
+          <span class="planned-chip__meta">${esc(meta)}</span>
+          <button class="planned-chip__del" onclick="event.stopPropagation();App.del('travels',${i.id})" aria-label="删除">&times;</button>
+        </div>`;
+      }).join('');
+      return `<div class="travel-section"><div class="travel-section__title" style="border-left-color:#3a7ab3">计划要去</div><div class="planned-strip">${chips}</div></div>`;
+    };
+    const renderVisited = (arr) => {
+      if (!arr.length) return '';
+      return `<div class="travel-section"><div class="travel-section__title">已去的城市</div>` + arr.map(i => {
         const cityLabel = i.city || _matchCity(i.place) || i.place || '未识别地点';
         return `<div class="travel-card"><div class="travel-card__place">${esc(cityLabel)}</div><div class="travel-card__date">${fmtDateRange(i)}</div>${i.note ? `<div class="travel-card__note">${esc(i.note)}</div>` : ''}${actionBtns(`editTravel(${i.id})`, `del('travels',${i.id})`)}</div>`;
       }).join('') + `</div>`;
     };
-    setTimeout(_initTravelMap, 0);
-    return top + summary + mapEl + renderList(visited, '已去的城市', '#d4726a') + renderList(planned, '计划要去', '#3a7ab3');
+    // 用 rAF 比 setTimeout(0) 更稳：等浏览器完成布局后再 init
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(_initTravelMap);
+    else setTimeout(_initTravelMap, 0);
+    return top + summary + mapEl + renderPlanned(planned) + renderVisited(visited);
   }
 
   function editTravel(id) {

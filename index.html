@@ -55,11 +55,13 @@
   <script src="js/auth.js?v=20260620"></script>
   <script src="js/app.js?v=20260620"></script>
 
-  <!-- 注册 Service Worker；版本号变化时新 SW 安装后会清掉旧 cache -->
+  <!-- 注册 Service Worker；版本号变化时新 SW 安装后会清掉旧 cache
+       sw.js 实际位于 /js/sw.js，但通过 scope:'/' + 服务端 Service-Worker-Allowed: /
+       响应头，仍然以全站作用域注册，PWA 缓存和离线能力保持不变。 -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js?v=20260620').then((reg) => {
+        navigator.serviceWorker.register('js/sw.js?v=20260620', { scope: '/' }).then((reg) => {
           if (reg.waiting) reg.waiting.postMessage('SKIP_WAITING');
           reg.addEventListener('updatefound', () => {
             const sw = reg.installing;

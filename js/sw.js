@@ -3,29 +3,31 @@
  *   - 任意资源发版日 → APP_VERSION 改写为当天日期；
  *   - 同一天多次发版可在后面追加 -HHMM，例如 20260620-1830；
  *   - 新版 SW 安装完成后会主动 skipWaiting + 清理旧 cache，避免「老缓存覆盖新代码」。
- */
+ * 文件位置：本 SW 位于 /js/sw.js，但注册时 scope 强制为 '/'（依赖
+ *   nginx 返回 Service-Worker-Allowed: /），因此 SHELL 内全部使用根绝对路径，
+ *   不能再用 './' 这类相对路径，否则会解析到 /js/ 下导致预缓存全部失败。 */
 const APP_VERSION = '20260620';
 const CACHE_NAME  = 'romance-journey-' + APP_VERSION;
 
-/* 需要预缓存的应用外壳；这里全部用相对路径以兼容子目录部署。
+/* 需要预缓存的应用外壳；统一使用根绝对路径，避免 SW 落在子目录时 './' 被解析到 /js/。
  * 注意：带 ?v= 的请求与不带的视作两条不同 entry，
  * 这里只缓存「干净 URL」，运行时拦截会把 ?v= 请求重写到干净 URL 命中缓存。 */
 const SHELL = [
-  './',
-  './index.html',
-  './manifest.json',
-  './css/style.css',
-  './js/config.js',
-  './js/lunar.js',
-  './js/store.js',
-  './js/auth.js',
-  './js/app.js',
-  './icons/favicon.svg',
-  './icons/apple-touch-icon.png',
-  './icons/icon-192.png',
-  './icons/icon-512.png',
-  './icons/icon-192-maskable.png',
-  './icons/icon-512-maskable.png',
+  '/',
+  '/index.html',
+  '/manifest.json',
+  '/css/style.css',
+  '/js/config.js',
+  '/js/lunar.js',
+  '/js/store.js',
+  '/js/auth.js',
+  '/js/app.js',
+  '/icons/favicon.svg',
+  '/icons/apple-touch-icon.png',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png',
+  '/icons/icon-192-maskable.png',
+  '/icons/icon-512-maskable.png',
 ];
 
 self.addEventListener('install', (event) => {
@@ -75,7 +77,7 @@ self.addEventListener('fetch', (event) => {
         const copy = res.clone();
         caches.open(CACHE_NAME).then((c) => c.put(req, copy)).catch(() => {});
         return res;
-      }).catch(() => caches.match(req).then((r) => r || caches.match('./index.html')))
+      }).catch(() => caches.match(req).then((r) => r || caches.match('/index.html')))
     );
     return;
   }
