@@ -135,9 +135,23 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .travel-card__place{font-size:.95rem;font-weight:700}
 .travel-card__date{font-size:.78rem;color:var(--text2);margin-top:.1rem}
 .travel-card__note{font-size:.82rem;color:var(--text2);margin-top:.2rem}
-.travel-summary{text-align:center;padding:.6rem 0 .8rem;font-size:.9rem;color:var(--text2)}
-.travel-summary strong{font-size:1.2rem;margin-right:.15rem}
-.travel-map{width:100%;height:360px;background:linear-gradient(180deg,rgba(212,114,106,.04),rgba(58,122,179,.04));border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:1rem;overflow:hidden;position:relative}
+.travel-hero{display:flex;flex-direction:column;gap:.45rem;padding:.15rem 0 .9rem}
+.travel-summary{display:flex;justify-content:center;align-items:center;gap:1rem;font-size:.9rem;color:var(--text2);flex-wrap:wrap}
+.travel-summary strong{font-size:1.25rem;margin-right:.15rem}
+.travel-summary__num--visited{color:#d4726a}
+.travel-summary__num--planned{color:#3a7ab3}
+.travel-summary__num--cities{color:#4b7f4e}
+.travel-legend{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:.7rem 1rem;font-size:.76rem;color:var(--text2)}
+.travel-legend__item{display:inline-flex;align-items:center;gap:.35rem}
+.travel-legend__dot{width:.56rem;height:.56rem;border-radius:50%;display:inline-block}
+.travel-legend__dot--visited{background:#d4726a;box-shadow:0 0 0 3px rgba(212,114,106,.12)}
+.travel-legend__dot--planned{background:#fff;border:2px solid #3a7ab3;box-shadow:0 0 0 3px rgba(58,122,179,.08)}
+.travel-legend__hint{color:var(--text3)}
+.travel-map-shell{background:linear-gradient(180deg,rgba(212,114,106,.03),rgba(58,122,179,.03));border-radius:calc(var(--radius) + 2px);box-shadow:var(--shadow);padding:.85rem .85rem .7rem;margin-bottom:1rem}
+.travel-map-shell__head{display:flex;justify-content:space-between;align-items:flex-end;gap:.5rem;margin-bottom:.65rem;flex-wrap:wrap}
+.travel-map-shell__title{font-size:.98rem;font-weight:700;color:var(--text)}
+.travel-map-shell__sub{font-size:.76rem;color:var(--text3)}
+.travel-map{width:100%;height:clamp(280px, 56vw, 380px);background:linear-gradient(180deg,rgba(212,114,106,.04),rgba(58,122,179,.04));border-radius:calc(var(--radius) - 2px);overflow:hidden;position:relative}
 .travel-map__msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:1rem;text-align:center;color:var(--text3);font-size:.85rem;line-height:1.5}
 .travel-section{margin-top:1rem}
 .travel-section__title{font-size:.85rem;font-weight:700;color:var(--text);padding:.15rem .55rem;margin-bottom:.5rem;border-left:3px solid var(--accent);line-height:1.2}
@@ -150,6 +164,23 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .planned-chip__meta{font-size:.7rem;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .planned-chip__del{position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;border:none;background:var(--surface);color:var(--text3);font-size:.78rem;line-height:1;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.18);display:flex;align-items:center;justify-content:center;padding:0}
 .planned-chip__del:hover{color:#c0392b}
+.travel-tooltip{min-width:120px;max-width:220px}
+.travel-tooltip__title{font-size:.88rem;font-weight:700;color:var(--text);margin-bottom:.25rem}
+.travel-tooltip__tag{display:inline-flex;align-items:center;padding:.13rem .42rem;border-radius:999px;font-size:.68rem;font-weight:700;margin-bottom:.3rem}
+.travel-tooltip__tag--visited{background:rgba(212,114,106,.12);color:#b85f57}
+.travel-tooltip__tag--planned{background:rgba(58,122,179,.12);color:#2f638f}
+.travel-tooltip__date,.travel-tooltip__note{font-size:.76rem;color:var(--text2);line-height:1.45}
+.travel-tooltip__note{margin-top:.15rem;white-space:normal;word-break:break-word}
+
+@media (max-width: 480px){
+.travel-map-shell{padding:.7rem .7rem .55rem}
+.travel-map-shell__head{align-items:flex-start}
+.travel-map-shell__sub{line-height:1.35}
+.travel-summary{gap:.6rem .9rem;font-size:.85rem}
+.travel-summary strong{font-size:1.12rem}
+.travel-legend{justify-content:flex-start}
+.travel-map{height:300px}
+}
 
 /* Series */
 .series-card{background:var(--surface);border-radius:var(--radius);padding:.9rem 1.1rem;margin-bottom:.6rem;box-shadow:var(--shadow);cursor:pointer;transition:transform .15s;display:flex;align-items:center;justify-content:space-between}

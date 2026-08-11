@@ -752,19 +752,26 @@ const App = (() => {
       _travelMap.setOption({
         backgroundColor: 'transparent',
         tooltip: {
+          confine: true,
+          appendToBody: true,
           trigger: 'item',
           formatter: p => {
             if (!p.data || !p.data.name) return '';
             const tag = p.data.status === 'planned' ? '计划' : '已去';
-            const note = p.data.note ? '<br/>' + p.data.note : '';
-            const dt = p.data.date ? '<br/>' + p.data.date : '';
-            return '<b>' + p.data.name + '</b> · ' + tag + dt + note;
+            const note = p.data.note ? '<div class="travel-tooltip__note">' + esc(p.data.note) + '</div>' : '';
+            const dt = p.data.date ? '<div class="travel-tooltip__date">' + esc(p.data.date) + '</div>' : '';
+            return '<div class="travel-tooltip">' +
+              '<div class="travel-tooltip__title">' + esc(p.data.name) + '</div>' +
+              '<div class="travel-tooltip__tag travel-tooltip__tag--' + (p.data.status === 'planned' ? 'planned' : 'visited') + '">' + tag + '</div>' +
+              dt + note +
+            '</div>';
           }
         },
         geo: {
           map: 'china',
           roam: true,
-          zoom: 1.1,
+          zoom: 1.06,
+          scaleLimit: { min: 0.9, max: 8 },
           itemStyle: { areaColor: '#f6e9e3', borderColor: '#d4726a', borderWidth: 0.6 },
           emphasis: { itemStyle: { areaColor: '#f2d9cf' }, label: { show: false } },
           label: { show: false }
@@ -773,13 +780,15 @@ const App = (() => {
           { name: '已去', type: 'scatter', coordinateSystem: 'geo',
             data: points.filter(p => p.status === 'visited'),
             symbolSize: 12,
-            itemStyle: { color: '#d4726a', shadowBlur: 8, shadowColor: 'rgba(212,114,106,.5)' },
-            label: { show: true, position: 'right', formatter: '{b}', fontSize: 11, color: '#6b3a35' } },
+            itemStyle: { color: '#d4726a', shadowBlur: 8, shadowColor: 'rgba(212,114,106,.35)' },
+            emphasis: { scale: true, itemStyle: { shadowBlur: 14, shadowColor: 'rgba(212,114,106,.45)' } },
+            label: { show: false } },
           { name: '计划', type: 'scatter', coordinateSystem: 'geo',
             data: points.filter(p => p.status === 'planned'),
             symbolSize: 11,
             itemStyle: { color: 'transparent', borderColor: '#3a7ab3', borderWidth: 2 },
-            label: { show: true, position: 'right', formatter: '{b}', fontSize: 11, color: '#3a5a7a' } }
+            emphasis: { scale: true, itemStyle: { borderWidth: 3 } },
+            label: { show: false } }
         ]
       });
       // 容器尺寸变化时自适应（旋屏、键盘弹起、Tab 切换等场景）
@@ -802,8 +811,9 @@ const App = (() => {
     if (!items.length) return top + empty('走过的每一寸土地，都值得被记住');
     const visited = items.filter(i => (i.status || 'visited') === 'visited');
     const planned = items.filter(i => i.status === 'planned');
-    const summary = `<div class="travel-summary"><span><strong style="color:#d4726a">${visited.length}</strong> 已去</span><span style="margin-left:1.2rem"><strong style="color:#3a7ab3">${planned.length}</strong> 计划</span></div>`;
-    const mapEl = `<div id="travelMap" class="travel-map"></div>`;
+    const uniqueCities = new Set(items.map(i => i.city || _matchCity(i.place) || i.place || '').filter(Boolean)).size;
+    const summary = `<div class="travel-hero"><div class="travel-summary"><span><strong class="travel-summary__num travel-summary__num--visited">${visited.length}</strong> 已去</span><span><strong class="travel-summary__num travel-summary__num--planned">${planned.length}</strong> 计划</span><span><strong class="travel-summary__num travel-summary__num--cities">${uniqueCities}</strong> 城市</span></div><div class="travel-legend"><span class="travel-legend__item"><i class="travel-legend__dot travel-legend__dot--visited"></i>已去</span><span class="travel-legend__item"><i class="travel-legend__dot travel-legend__dot--planned"></i>计划</span><span class="travel-legend__hint">拖动查看，滚轮缩放，悬停看备注</span></div></div>`;
+    const mapEl = `<div class="travel-map-shell"><div class="travel-map-shell__head"><div class="travel-map-shell__title">旅行地图</div><div class="travel-map-shell__sub">共 ${items.length} 次足迹 · ${uniqueCities} 个城市</div></div><div id="travelMap" class="travel-map"></div></div>`;
     // 计划要去：紧凑横向 chip，置于「已去」之前，移动端更易触达
     const renderPlanned = (arr) => {
       if (!arr.length) return '';
