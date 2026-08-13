@@ -40,7 +40,7 @@ const Auth = (() => {
     const checked = !!prefillEmail;
     document.getElementById('main').innerHTML =
       '<div class="auth-screen">' +
-        '<div class="auth-heart">&hearts;</div>' +
+        '<div class="auth-heart"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M32 56C29.5 53.9 7 40.3 7 23.5C7 15.2 13.1 9 21.3 9C27.1 9 31.2 12.4 32 13.5C32.8 12.4 36.9 9 42.7 9C50.9 9 57 15.2 57 23.5C57 40.3 34.5 53.9 32 56Z"/></svg></div>' +
         '<h2 class="auth-title">恋爱日志</h2>' +
         '<p class="auth-subtitle">登录后双人共享，数据云端同步</p>' +
         '<div class="auth-form">' +
@@ -96,7 +96,7 @@ const Auth = (() => {
     document.getElementById('topTitle').textContent = '配对';
     document.getElementById('main').innerHTML =
       '<div class="auth-screen">' +
-        '<div class="auth-heart">&hearts;</div>' +
+        '<div class="auth-heart"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M32 56C29.5 53.9 7 40.3 7 23.5C7 15.2 13.1 9 21.3 9C27.1 9 31.2 12.4 32 13.5C32.8 12.4 36.9 9 42.7 9C50.9 9 57 15.2 57 23.5C57 40.3 34.5 53.9 32 56Z"/></svg></div>' +
         '<h2 class="auth-title">创建你们的空间</h2>' +
         '<p class="auth-subtitle">创建新的情侣空间，或输入对方的邀请码加入</p>' +
         '<div class="auth-form">' +

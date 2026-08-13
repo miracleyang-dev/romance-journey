@@ -318,9 +318,9 @@ const App = (() => {
     if (start) {
       const days = diffDays(parseLocalDate(start), today0());
       const na = data.couple.nameA || '我', nb = data.couple.nameB || '你';
-      heroHtml = `<div class="hero"><div class="hero__heart">&hearts;</div><div class="hero__days">${days}</div><div class="hero__names">${esc(na)} & ${esc(nb)} 在一起的第 ${days} 天</div></div>`;
+      heroHtml = `<div class="hero"><div class="hero__heart"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M32 56C29.5 53.9 7 40.3 7 23.5C7 15.2 13.1 9 21.3 9C27.1 9 31.2 12.4 32 13.5C32.8 12.4 36.9 9 42.7 9C50.9 9 57 15.2 57 23.5C57 40.3 34.5 53.9 32 56Z"/></svg></div><div class="hero__days">${days}</div><div class="hero__names">${esc(na)} & ${esc(nb)} 在一起的第 ${days} 天</div></div>`;
     } else {
-      heroHtml = `<div class="hero"><div class="hero__heart">&hearts;</div><div class="hero__days">0</div><div class="hero__hint">点击右上角设置，填写关系确定日</div></div>`;
+      heroHtml = `<div class="hero"><div class="hero__heart"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M32 56C29.5 53.9 7 40.3 7 23.5C7 15.2 13.1 9 21.3 9C27.1 9 31.2 12.4 32 13.5C32.8 12.4 36.9 9 42.7 9C50.9 9 57 15.2 57 23.5C57 40.3 34.5 53.9 32 56Z"/></svg></div><div class="hero__days">0</div><div class="hero__hint">点击右上角设置，填写关系确定日</div></div>`;
     }
 
     let upHtml = '';
