@@ -66,10 +66,16 @@ const Auth = (() => {
     if (!email || !pwd) { _showError('请填写邮箱和密码'); return; }
     _showError('登录中...');
     const sb = Store.client();
-    const result = await sb.auth.signInWithPassword({ email, password: pwd });
-    if (result.error) { _showError('登录失败：' + result.error.message); return; }
-    _handleRemember(email);
-    App.init();
+    if (!sb) { _showError('连接服务失败，请检查网络后刷新页面'); return; }
+    try {
+      const result = await sb.auth.signInWithPassword({ email, password: pwd });
+      if (result.error) { _showError('登录失败：' + result.error.message); return; }
+      _handleRemember(email);
+      await App.init();
+    } catch (error) {
+      console.error('login', error);
+      _showError('登录失败，请检查网络后重试');
+    }
   }
 
   async function register() {
@@ -79,15 +85,21 @@ const Auth = (() => {
     if (pwd.length < 6) { _showError('密码至少 6 位'); return; }
     _showError('注册中...');
     const sb = Store.client();
-    const result = await sb.auth.signUp({ email, password: pwd });
-    if (result.error) { _showError('注册失败：' + result.error.message); return; }
-    _handleRemember(email);
-    // 若 Supabase 开启了邮箱确认，signUp 不会返回 session，避免直接跳进 App 后又空白
-    if (!result.data || !result.data.session) {
-      _showError('注册成功，请前往邮箱完成验证后再登录');
-      return;
+    if (!sb) { _showError('连接服务失败，请检查网络后刷新页面'); return; }
+    try {
+      const result = await sb.auth.signUp({ email, password: pwd });
+      if (result.error) { _showError('注册失败：' + result.error.message); return; }
+      _handleRemember(email);
+      // 若 Supabase 开启了邮箱确认，signUp 不会返回 session，避免直接跳进 App 后又空白
+      if (!result.data || !result.data.session) {
+        _showError('注册成功，请前往邮箱完成验证后再登录');
+        return;
+      }
+      await App.init();
+    } catch (error) {
+      console.error('register', error);
+      _showError('注册失败，请检查网络后重试');
     }
-    App.init();
   }
 
   function renderPairScreen() {

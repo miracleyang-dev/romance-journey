@@ -6,7 +6,7 @@
  * 文件位置：本 SW 位于 /js/sw.js，但注册时 scope 强制为 '/'（依赖
  *   nginx 返回 Service-Worker-Allowed: /），因此 SHELL 内全部使用根绝对路径，
  *   不能再用 './' 这类相对路径，否则会解析到 /js/ 下导致预缓存全部失败。 */
-const APP_VERSION = '20260824';
+const APP_VERSION = '20260824-01';
 const CACHE_NAME  = 'romance-journey-' + APP_VERSION;
 
 /* 需要预缓存的应用外壳；统一使用根绝对路径，避免 SW 落在子目录时 './' 被解析到 /js/。

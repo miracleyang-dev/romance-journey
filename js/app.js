@@ -120,7 +120,16 @@ const App = (() => {
       });
       _visibilityBound = true;
     }
-    const loaded = await Store.load();
+    let loaded;
+    try {
+      loaded = await Store.load();
+    } catch (error) {
+      console.error('App.init', error);
+      Auth.renderAuthScreen();
+      const errorEl = document.getElementById('authError');
+      if (errorEl) errorEl.textContent = '连接服务失败，请检查网络后刷新页面';
+      return;
+    }
     if (!loaded) { Auth.renderAuthScreen(); return; }
     if (loaded._needPair) { Auth.renderPairScreen(); return; }
     data = loaded;

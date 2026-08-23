@@ -6,18 +6,18 @@
   <title>恋爱日志</title>
   <!-- 静态资源版本号：发版当天日期 yyyymmdd（同日多次发版可改为 yyyymmdd-HHMM）
        与 sw.js 中 APP_VERSION、manifest.json 中 version 同步维护即可。 -->
-  <link rel="icon" type="image/svg+xml" sizes="any" href="icons/favicon.svg?v=20260824">
-  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png?v=20260824">
-  <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png?v=20260824">
-  <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png?v=20260824">
-  <link rel="manifest" href="manifest.json?v=20260824">
+  <link rel="icon" type="image/svg+xml" sizes="any" href="icons/favicon.svg?v=20260824-01">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png?v=20260824-01">
+  <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png?v=20260824-01">
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png?v=20260824-01">
+  <link rel="manifest" href="manifest.json?v=20260824-01">
   <meta name="theme-color" content="#d4726a">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="恋爱日志">
   <meta name="application-name" content="恋爱日志">
-  <link rel="stylesheet" href="css/style.css?v=20260824">
+  <link rel="stylesheet" href="css/style.css?v=20260824-01">
   <script>
     // Supabase SDK 多源兜底：移动端某个 CDN 不稳定时自动切换。
     window.__supabaseReady = (function () {
@@ -41,7 +41,7 @@
       return loadOne(0);
     })();
   </script>
-  <script src="js/config.js?v=20260824" defer></script>
+  <script src="js/config.js?v=20260824-01"></script>
 </head>
 <body>
   <!-- 顶栏 -->
@@ -69,10 +69,10 @@
     </div>
   </div>
 
-  <script src="js/lunar.js?v=20260824"></script>
-  <script src="js/store.js?v=20260824"></script>
-  <script src="js/auth.js?v=20260824"></script>
-  <script src="js/app.js?v=20260824"></script>
+  <script src="js/lunar.js?v=20260824-01"></script>
+  <script src="js/store.js?v=20260824-01"></script>
+  <script src="js/auth.js?v=20260824-01"></script>
+  <script src="js/app.js?v=20260824-01"></script>
 
   <!-- 注册 Service Worker；版本号变化时新 SW 安装后会清掉旧 cache
        sw.js 实际位于 /js/sw.js，但通过 scope:'/' + 服务端 Service-Worker-Allowed: /
@@ -80,7 +80,7 @@
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('js/sw.js?v=20260824', { scope: '/' }).then((reg) => {
+        navigator.serviceWorker.register('js/sw.js?v=20260824-01', { scope: '/' }).then((reg) => {
           if (reg.waiting) reg.waiting.postMessage('SKIP_WAITING');
           reg.addEventListener('updatefound', () => {
             const sw = reg.installing;
