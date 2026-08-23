@@ -102,6 +102,9 @@ const App = (() => {
   }
 
   async function init() {
+    if (window.__supabaseReady && typeof window.__supabaseReady.then === 'function') {
+      try { await window.__supabaseReady; } catch (_) {}
+    }
     Store.init();
     if (!_navBound) {
       document.getElementById('bottomnav').addEventListener('click', e => {
@@ -683,6 +686,13 @@ const App = (() => {
   let _travelMapLoading = null;
   let _travelResizeObs = null;
   let _travelInitTimer = null;
+  let _echartsLoading = null;
+  const TRAVEL_GEO_CACHE_KEY = 'rj_china_geojson_v1';
+  const ECHARTS_SDK_URLS = [
+    'https://cdn.bootcdn.net/ajax/libs/echarts/5.5.1/echarts.min.js',
+    'https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js',
+    'https://unpkg.com/echarts@5/dist/echarts.min.js'
+  ];
   const TRAVEL_GEO_URLS = [
     'https://geo.datav.aliyun.com/areas_v3/bound/100000_full.json',
     'https://geojson.cn/api/china/china.json',
@@ -692,30 +702,112 @@ const App = (() => {
     if (!el) return;
     el.innerHTML = '<div class="travel-map__msg">' + esc(msg) + '</div>';
   }
+
+  function _fetchWithTimeout(url, timeoutMs) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), timeoutMs);
+    return fetch(url, { cache: 'force-cache', signal: ctrl.signal })
+      .finally(() => clearTimeout(t));
+  }
+
+  function _loadScriptWithTimeout(url, timeoutMs = 9000) {
+    return new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      let done = false;
+      const timer = setTimeout(() => {
+        if (done) return;
+        done = true;
+        try { s.remove(); } catch (_) {}
+        reject(new Error('timeout'));
+      }, timeoutMs);
+      s.src = url;
+      s.async = true;
+      s.onload = () => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        resolve();
+      };
+      s.onerror = () => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        reject(new Error('load failed'));
+      };
+      document.head.appendChild(s);
+    });
+  }
+
+  function _ensureEchartsLoaded() {
+    if (window.echarts) return Promise.resolve();
+    if (_echartsLoading) return _echartsLoading;
+    const tryLoad = (i) => {
+      if (window.echarts) return Promise.resolve();
+      if (i >= ECHARTS_SDK_URLS.length) return Promise.reject(new Error('echarts load failed'));
+      return _loadScriptWithTimeout(ECHARTS_SDK_URLS[i])
+        .then(() => {
+          if (!window.echarts) throw new Error('echarts missing');
+        })
+        .catch(() => tryLoad(i + 1));
+    };
+    _echartsLoading = tryLoad(0).finally(() => { _echartsLoading = null; });
+    return _echartsLoading;
+  }
+
+  function _getCachedChinaGeo() {
+    try {
+      const raw = localStorage.getItem(TRAVEL_GEO_CACHE_KEY);
+      if (!raw) return null;
+      const json = JSON.parse(raw);
+      if (!json || !json.features) return null;
+      return json;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function _setCachedChinaGeo(json) {
+    try {
+      localStorage.setItem(TRAVEL_GEO_CACHE_KEY, JSON.stringify(json));
+    } catch (_) {}
+  }
+
   function _loadChinaGeo() {
     if (_travelMapLoaded) return Promise.resolve();
     if (_travelMapLoading) return _travelMapLoading;
+    const cached = _getCachedChinaGeo();
+    if (cached && window.echarts) {
+      window.echarts.registerMap('china', cached);
+      _travelMapLoaded = true;
+      return Promise.resolve();
+    }
     const tryUrl = (i) => {
       if (i >= TRAVEL_GEO_URLS.length) return Promise.reject(new Error('all geo sources failed'));
-      return fetch(TRAVEL_GEO_URLS[i], { cache: 'force-cache' })
+      return _fetchWithTimeout(TRAVEL_GEO_URLS[i], 6500)
         .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
         .then(json => {
           if (!json || !json.features) throw new Error('invalid geojson');
-          echarts.registerMap('china', json);
+          window.echarts.registerMap('china', json);
+          _setCachedChinaGeo(json);
           _travelMapLoaded = true;
         })
         .catch(() => tryUrl(i + 1));
     };
-    _travelMapLoading = tryUrl(0).finally(() => { _travelMapLoading = null; });
+    _travelMapLoading = tryUrl(0).catch((err) => {
+      const backup = _getCachedChinaGeo();
+      if (backup && window.echarts) {
+        window.echarts.registerMap('china', backup);
+        _travelMapLoaded = true;
+        return;
+      }
+      return Promise.reject(err);
+    }).finally(() => { _travelMapLoading = null; });
     return _travelMapLoading;
   }
   function _initTravelMap() {
     const el = document.getElementById('travelMap');
     if (!el) return;
-    if (typeof echarts === 'undefined') {
-      _travelShowMsg(el, 'ECharts 加载失败，请检查网络后刷新');
-      return;
-    }
+    _travelShowMsg(el, '地图加载中...');
     // 销毁旧实例，避免重复 init
     if (_travelMap) { try { _travelMap.dispose(); } catch (_) {} _travelMap = null; }
     if (_travelResizeObs) { try { _travelResizeObs.disconnect(); } catch (_) {} _travelResizeObs = null; }
@@ -744,7 +836,7 @@ const App = (() => {
         return;
       }
       try {
-        _travelMap = echarts.init(cur);
+        _travelMap = window.echarts.init(cur);
       } catch (e) {
         _travelShowMsg(cur, '地图初始化失败');
         return;
@@ -800,7 +892,8 @@ const App = (() => {
       }
     };
 
-    _loadChinaGeo()
+    _ensureEchartsLoaded()
+      .then(_loadChinaGeo)
       .then(draw)
       .catch(() => _travelShowMsg(el, '地图加载失败，请检查网络后刷新'));
   }
