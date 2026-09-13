@@ -3,12 +3,12 @@
   "short_name": "恋爱日志",
   "description": "双人共享的恋爱记录应用",
   "scope": "./",
-  "start_url": "./index.html?utm_source=pwa",
+  "start_url": "./index.html?utm_source=pwa&v=20260913-01",
   "display": "standalone",
   "background_color": "#faf5f0",
   "theme_color": "#d4726a",
   "orientation": "portrait",
-  "version": "20260824-01",
+  "version": "20260913-01",
   "icons": [
     {
       "src": "icons/favicon.svg",

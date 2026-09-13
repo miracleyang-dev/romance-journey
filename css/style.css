@@ -361,6 +361,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .auth-form input{width:100%;padding:.6rem .9rem;border:1px solid var(--border);border-radius:10px;font-size:.9rem;font-family:var(--font);background:var(--surface2);outline:none;transition:border .2s}
 .auth-form input:focus{border-color:var(--accent);background:var(--surface)}
 .auth-btn{width:100%;padding:.65rem;font-size:.9rem;border-radius:20px;cursor:pointer;font-family:var(--font)}
+.auth-btn:disabled{opacity:.65;cursor:not-allowed}
 .auth-error{font-size:.82rem;color:var(--accent);min-height:1.2em;margin-top:.3rem}
 .auth-remember{display:flex;align-items:center;gap:.4rem;font-size:.82rem;color:var(--text2);cursor:pointer;user-select:none;margin:-.2rem 0}
 .auth-remember input[type="checkbox"]{width:15px;height:15px;accent-color:var(--accent);cursor:pointer;margin:0}

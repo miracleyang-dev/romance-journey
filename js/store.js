@@ -5,6 +5,7 @@ const Store = (() => {
   let _initialized = false;
   let _lastSaveTime = 0;
   let _userId = null;
+  let _readyPromise = null;
 
   const DEFAULT_DATA = {
     couple: { startDate: '', nameA: '', nameB: '' },
@@ -36,28 +37,52 @@ const Store = (() => {
   /* ===== 初始化 ===== */
 
   function init() {
-    if (_initialized) return;
+    if (sb) return true;
     const url = window.__SUPABASE_URL__;
     const key = window.__SUPABASE_ANON_KEY__;
     if (url && key && window.supabase) {
       sb = window.supabase.createClient(url, key);
+      _initialized = true;
+      return true;
     }
-    _initialized = true;
+    _initialized = false;
+    return false;
   }
 
-  function client() { return sb; }
+  async function ready() {
+    if (init()) return sb;
+    if (_readyPromise) return _readyPromise;
+    _readyPromise = (async () => {
+      if (window.__supabaseReady && typeof window.__supabaseReady.then === 'function') {
+        try { await window.__supabaseReady; } catch (_) {}
+      }
+      if (init()) return sb;
+      if (typeof window.__loadSupabaseSdk === 'function') {
+        try {
+          window.__supabaseReady = window.__loadSupabaseSdk();
+          await window.__supabaseReady;
+        } catch (_) {}
+      }
+      return init() ? sb : null;
+    })().finally(() => { _readyPromise = null; });
+    return _readyPromise;
+  }
+
+  function client() { init(); return sb; }
 
   /* ===== 用户 & 配对 ===== */
 
   async function getUser() {
-    if (!sb) return null;
-    const { data: { user } } = await sb.auth.getUser();
-    return user;
+    if (!await ready()) return null;
+    const { data, error } = await sb.auth.getSession();
+    if (error) throw error;
+    return data?.session?.user || null;
   }
 
   async function findCoupleId(userId) {
-    const { data } = await sb.from('couple_members')
+    const { data, error } = await sb.from('couple_members')
       .select('couple_id').eq('user_id', userId).maybeSingle();
+    if (error) throw error;
     return data?.couple_id || null;
   }
 
@@ -67,8 +92,9 @@ const Store = (() => {
     const { data: couple, error } = await sb.from('couples')
       .insert({ data: cloneDefault() }).select().single();
     if (error) { console.error('createCouple', error); return null; }
-    await sb.from('couple_members')
+    const { error: memberError } = await sb.from('couple_members')
       .insert({ couple_id: couple.id, user_id: user.id });
+    if (memberError) { console.error('createCouple member', memberError); return null; }
     coupleId = couple.id;
     return couple;
   }
@@ -76,8 +102,10 @@ const Store = (() => {
   async function joinCouple(inviteCode) {
     const user = await getUser();
     if (!user) return { error: '未登录' };
+    const normalizedCode = String(inviteCode || '').trim().toUpperCase();
+    if (!/^[A-Z0-9]{6}$/.test(normalizedCode)) return { error: '请输入 6 位有效邀请码' };
     const { data: cid, error: lookupErr } = await sb
-      .rpc('lookup_couple_by_invite', { code: inviteCode.toUpperCase() });
+      .rpc('lookup_couple_by_invite', { code: normalizedCode });
     if (lookupErr || !cid) return { error: '邀请码无效' };
     const { error } = await sb.from('couple_members')
       .insert({ couple_id: cid, user_id: user.id });
@@ -91,16 +119,17 @@ const Store = (() => {
 
   async function getInviteCode() {
     if (!sb || !coupleId) return '';
-    const { data } = await sb.from('couples')
+    const { data, error } = await sb.from('couples')
       .select('invite_code').eq('id', coupleId).single();
+    if (error) { console.error('getInviteCode', error); return ''; }
     return data?.invite_code || '';
   }
 
   /* ===== 数据读写 ===== */
 
   async function load() {
-    init();
-    if (!sb) return cloneDefault();
+    await ready();
+    if (!sb) return null;
     const user = await getUser();
     if (!user) return null;
     _userId = user.id;
@@ -108,7 +137,8 @@ const Store = (() => {
     if (!coupleId) return { _needPair: true };
     const { data: row, error } = await sb.from('couples')
       .select('data').eq('id', coupleId).single();
-    if (error || !row) return cloneDefault();
+    if (error) throw error;
+    if (!row) return cloneDefault();
     return normalizeData(row.data || {});
   }
 
@@ -118,15 +148,17 @@ const Store = (() => {
     const clean = Object.assign({}, d);
     delete clean._needPair;
     if (_userId) clean._lastEditorId = _userId;
-    await sb.from('couples')
+    const { error } = await sb.from('couples')
       .update({ data: clean, updated_at: new Date().toISOString() })
       .eq('id', coupleId);
+    if (error) console.error('save', error);
   }
 
   /* ===== 实时同步 ===== */
 
   function subscribe(onChange) {
     if (!sb || !coupleId) return;
+    unsubscribe();
     channel = sb.channel('couple-sync')
       .on('postgres_changes', {
         event: 'UPDATE', schema: 'public', table: 'couples',
@@ -166,20 +198,43 @@ const Store = (() => {
 
   function cloneDefault() { return JSON.parse(JSON.stringify(DEFAULT_DATA)); }
 
+  function normalizeIds(arr) {
+    if (!Array.isArray(arr)) return;
+    const seen = new Set();
+    let next = 1;
+    arr.forEach(item => {
+      if (!item || typeof item !== 'object') return;
+      let id = Number(item.id);
+      if (!Number.isSafeInteger(id) || id <= 0 || seen.has(id)) {
+        while (seen.has(next)) next += 1;
+        id = next;
+      }
+      item.id = id;
+      seen.add(id);
+      if (id >= next) next = id + 1;
+    });
+  }
+
   function normalizeData(d) {
     if (!d || typeof d !== 'object') return cloneDefault();
     for (const k in DEFAULT_DATA) {
+      const def = DEFAULT_DATA[k];
       if (!(k in d)) {
-        const def = DEFAULT_DATA[k];
         d[k] = Array.isArray(def) ? [] : (typeof def === 'object' && def !== null ? JSON.parse(JSON.stringify(def)) : def);
+      } else if (Array.isArray(def) && !Array.isArray(d[k])) {
+        d[k] = [];
+      } else if (def && typeof def === 'object' && !Array.isArray(def) && (typeof d[k] !== 'object' || d[k] === null || Array.isArray(d[k]))) {
+        d[k] = JSON.parse(JSON.stringify(def));
       }
     }
-    if (d.couple && typeof d.couple === 'object') {
-      const dc = DEFAULT_DATA.couple;
-      for (const ck in dc) {
-        if (!(ck in d.couple)) d.couple[ck] = dc[ck];
-      }
+    const dc = DEFAULT_DATA.couple;
+    for (const ck in dc) {
+      if (!(ck in d.couple)) d.couple[ck] = dc[ck];
     }
+    const arrayKeys = ['milestones', 'dates', 'plans', 'memos', 'travels', 'treaties', 'photos', 'heartwords', 'questions', 'suggestions', 'reflections'];
+    arrayKeys.forEach(key => {
+      d[key] = (d[key] || []).filter(item => item && typeof item === 'object' && !Array.isArray(item));
+    });
     /* 为缺少 createdAt 的旧记录补齐，用 date 兜底 */
     const _tsKeys = ['heartwords', 'questions', 'suggestions', 'reflections'];
     for (const key of _tsKeys) {
@@ -192,7 +247,12 @@ const Store = (() => {
       }
     }
     if (Array.isArray(d.series)) {
+      d.series = d.series.filter(s => s && typeof s === 'object' && !Array.isArray(s));
+      normalizeIds(d.series);
       d.series.forEach(s => {
+        if (!Array.isArray(s.items)) s.items = [];
+        s.items = s.items.filter(item => item && typeof item === 'object' && !Array.isArray(item));
+        normalizeIds(s.items);
         (s.items || []).forEach(item => {
           if (!item.createdAt && item.date) {
             item.createdAt = item.date + 'T00:00:00.000Z';
@@ -204,6 +264,14 @@ const Store = (() => {
     if (Array.isArray(d.travels)) {
       d.travels.forEach(t => {
         if (!t.status) t.status = 'visited';
+      });
+    }
+    arrayKeys.forEach(key => normalizeIds(d[key]));
+    if (Array.isArray(d.treaties)) {
+      d.treaties.forEach(t => {
+        if (!Array.isArray(t.children)) t.children = [];
+        t.children = t.children.filter(item => item && typeof item === 'object' && !Array.isArray(item));
+        normalizeIds(t.children);
       });
     }
     return d;
@@ -424,7 +492,7 @@ const Store = (() => {
   /* ===== 公共接口 ===== */
 
   return {
-    init, client, getUser,
+    init, ready, client, getUser,
     getUserId: () => _userId,
     load, save,
     subscribe, unsubscribe,

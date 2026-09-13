@@ -89,6 +89,7 @@ const App = (() => {
   let _navBound = false;
   let _midnightTimer = null;
   let _visibilityBound = false;
+  let _initSeq = 0;
 
   // 在下一次本地 0 点准时刷新页面，并递归调度下一次
   function scheduleMidnightRefresh() {
@@ -102,10 +103,7 @@ const App = (() => {
   }
 
   async function init() {
-    if (window.__supabaseReady && typeof window.__supabaseReady.then === 'function') {
-      try { await window.__supabaseReady; } catch (_) {}
-    }
-    Store.init();
+    const seq = ++_initSeq;
     if (!_navBound) {
       document.getElementById('bottomnav').addEventListener('click', e => {
         const btn = e.target.closest('.navitem');
@@ -120,9 +118,23 @@ const App = (() => {
       });
       _visibilityBound = true;
     }
+    if (!Store.init()) {
+      Auth.renderAuthScreen();
+      const errorEl = document.getElementById('authError');
+      if (errorEl) errorEl.textContent = '正在连接服务...';
+    }
     let loaded;
     try {
+      await Store.ready();
+      if (seq !== _initSeq) return;
+      if (!Store.client()) {
+        Auth.renderAuthScreen();
+        const errorEl = document.getElementById('authError');
+        if (errorEl) errorEl.textContent = '连接服务超时，请检查网络后刷新页面';
+        return;
+      }
       loaded = await Store.load();
+      if (seq !== _initSeq) return;
     } catch (error) {
       console.error('App.init', error);
       Auth.renderAuthScreen();
@@ -198,21 +210,31 @@ const App = (() => {
   /* ===== 通用工具 ===== */
 
   function sortDesc(a, b) {
-    if (a.createdAt && b.createdAt) return b.createdAt.localeCompare(a.createdAt);
-    if (a.date || b.date) return (b.date || '').localeCompare(a.date || '');
+    const ac = String(a.createdAt || ''), bc = String(b.createdAt || '');
+    if (ac && bc) return bc.localeCompare(ac);
+    const ad = safeDate(a.date), bd = safeDate(b.date);
+    if (ad || bd) return bd.localeCompare(ad);
     return (b.id || 0) - (a.id || 0);
   }
 
-  function diffDays(a, b) { return Math.max(0, Math.floor((b - a) / 864e5)); }
+  function diffDays(a, b) {
+    if (!(a instanceof Date) || Number.isNaN(a.getTime()) || !(b instanceof Date) || Number.isNaN(b.getTime())) return 0;
+    return Math.max(0, Math.floor((b - a) / 864e5));
+  }
   function today0() { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }
+  function safeDate(s) {
+    const value = String(s || '').slice(0, 10);
+    return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : '';
+  }
   // 把 "YYYY-MM-DD" 按本地 0 点解析，避免被当作 UTC 而引入时区偏移
   function parseLocalDate(s) {
-    if (!s) return null;
-    const [y, m, d] = s.split('-').map(Number);
+    const value = safeDate(s);
+    if (!value) return null;
+    const [y, m, d] = value.split('-').map(Number);
     return new Date(y, (m || 1) - 1, d || 1);
   }
   function todayISO() { return new Date().toISOString().slice(0, 10); }
-  function fmtDate(s) { return s ? s.replace(/-/g, '.') : ''; }
+  function fmtDate(s) { const value = safeDate(s); return value ? value.replace(/-/g, '.') : ''; }
   function v(id) { return (document.getElementById(id)?.value || '').trim(); }
   function rawV(id) { return document.getElementById(id)?.value || ''; }
 
@@ -221,6 +243,31 @@ const App = (() => {
     const d = document.createElement('div');
     d.textContent = s;
     return d.innerHTML;
+  }
+
+  function attr(s) {
+    return String(s || '')
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  function dateAttr(s, fallback = '') {
+    return attr(safeDate(s) || fallback);
+  }
+
+  function safeImgSrc(src) {
+    const value = String(src || '').trim();
+    if (/^data:image\/(?:png|jpe?g|webp|gif);base64,[a-z0-9+/=\s]+$/i.test(value)) return attr(value);
+    try {
+      const url = new URL(value, window.location.href);
+      if (url.protocol === 'https:' || (url.protocol === 'http:' && window.location.protocol !== 'https:')) {
+        return attr(url.href);
+      }
+    } catch (_) {}
+    return '';
   }
 
   function nextSolarForMilestone(ms) {
@@ -242,13 +289,15 @@ const App = (() => {
   }
 
   function fmtDateRange(item) {
-    if (item.dateEnd && item.dateEnd !== item.date) {
-      const a = item.date.split('-'), b = item.dateEnd.split('-');
+    const start = safeDate(item && item.date);
+    const end = safeDate(item && item.dateEnd);
+    if (end && end !== start) {
+      const a = start.split('-'), b = end.split('-');
       const startStr = a[0] + '.' + a[1] + '.' + a[2];
       const endStr = (a[0] === b[0]) ? b[1] + '.' + b[2] : b[0] + '.' + b[1] + '.' + b[2];
       return startStr + ' ~ ' + endStr;
     }
-    return fmtDate(item.date);
+    return fmtDate(start);
   }
 
   function fmtNextDate(d) {
@@ -258,9 +307,9 @@ const App = (() => {
 
   function nameOptions(selectedValue, emptyLabel = '不署名') {
     const nameA = data.couple.nameA || '', nameB = data.couple.nameB || '';
-    let html = `<option value="" ${!selectedValue ? 'selected' : ''}>${emptyLabel}</option>`;
-    if (nameA) html += `<option value="${esc(nameA)}" ${selectedValue === nameA ? 'selected' : ''}>${esc(nameA)}</option>`;
-    if (nameB) html += `<option value="${esc(nameB)}" ${selectedValue === nameB ? 'selected' : ''}>${esc(nameB)}</option>`;
+    let html = `<option value="" ${!selectedValue ? 'selected' : ''}>${esc(emptyLabel)}</option>`;
+    if (nameA) html += `<option value="${attr(nameA)}" ${selectedValue === nameA ? 'selected' : ''}>${esc(nameA)}</option>`;
+    if (nameB) html += `<option value="${attr(nameB)}" ${selectedValue === nameB ? 'selected' : ''}>${esc(nameB)}</option>`;
     return html;
   }
 
@@ -268,8 +317,8 @@ const App = (() => {
     const nameA = data.couple.nameA || '', nameB = data.couple.nameB || '';
     const sel = selectedValue || nameA;
     let html = '';
-    if (nameA) html += `<option value="${esc(nameA)}" ${sel === nameA ? 'selected' : ''}>${esc(nameA)}</option>`;
-    if (nameB) html += `<option value="${esc(nameB)}" ${sel === nameB ? 'selected' : ''}>${esc(nameB)}</option>`;
+    if (nameA) html += `<option value="${attr(nameA)}" ${sel === nameA ? 'selected' : ''}>${esc(nameA)}</option>`;
+    if (nameB) html += `<option value="${attr(nameB)}" ${sel === nameB ? 'selected' : ''}>${esc(nameB)}</option>`;
     return html;
   }
 
@@ -325,7 +374,7 @@ const App = (() => {
   /* ===== HOME ===== */
 
   function renderHome() {
-    const start = data.couple.startDate;
+    const start = safeDate(data.couple.startDate);
     let heroHtml;
     if (start) {
       const days = diffDays(parseLocalDate(start), today0());
@@ -346,7 +395,10 @@ const App = (() => {
 
     const photos = data.photos || [];
     let photoHtml = `<div class="section"><div class="section__head"><span class="section__title">照片墙</span></div><div class="photo-wall">`;
-    photoHtml += photos.map(p => `<div class="photo-wall__item" onclick="App.viewPhoto(${p.id})"><img src="${p.src}" alt=""></div>`).join('');
+    photoHtml += photos.map(p => {
+      const src = safeImgSrc(p.src);
+      return src ? `<div class="photo-wall__item" onclick="App.viewPhoto(${p.id})"><img src="${src}" alt=""></div>` : '';
+    }).join('');
     photoHtml += `<div class="photo-wall__add" onclick="document.getElementById('photoInput').click()">+<input type="file" id="photoInput" accept="image/*" hidden onchange="App.addPhoto(event)"></div></div></div>`;
     return heroHtml + upHtml + photoHtml;
   }
@@ -363,7 +415,8 @@ const App = (() => {
 
   function viewPhoto(id) {
     const p = (data.photos || []).find(i => i.id === id); if (!p) return;
-    showModal('照片', `<div style="text-align:center"><img src="${p.src}" style="max-width:100%;border-radius:8px"></div><div class="modal__footer"><button class="btn-secondary" style="color:#c0392b" onclick="App.del('photos',${p.id})">删除</button></div>`);
+    const src = safeImgSrc(p.src);
+    showModal('照片', `<div style="text-align:center">${src ? `<img src="${src}" style="max-width:100%;border-radius:8px" alt="">` : '<div class="empty">这张照片地址无效</div>'}</div><div class="modal__footer"><button class="btn-secondary" style="color:#c0392b" onclick="App.del('photos',${p.id})">删除</button></div>`);
   }
 
   /* ===== MILESTONES ===== */
@@ -391,7 +444,7 @@ const App = (() => {
     const months = Array.from({ length: 12 }, (_, i) => `<option value="${i + 1}" ${item.month === (i + 1) ? 'selected' : ''}>${i + 1}月</option>`).join('');
     const days = Array.from({ length: 31 }, (_, i) => `<option value="${i + 1}" ${item.day === (i + 1) ? 'selected' : ''}>${i + 1}日</option>`).join('');
     showModal(id ? '编辑节点' : '添加节点', `
-      <label>名称</label><input id="f_title" value="${esc(item.title)}" placeholder="例：恋爱纪念日">
+      <label>名称</label><input id="f_title" value="${attr(item.title)}" placeholder="例：恋爱纪念日">
       <label>日历类型</label><select id="f_lunar"><option value="0" ${!item.isLunar ? 'selected' : ''}>公历</option><option value="1" ${item.isLunar ? 'selected' : ''}>农历</option></select>
       <label>月</label><select id="f_month">${months}</select>
       <label>日</label><select id="f_day">${days}</select>
@@ -406,7 +459,7 @@ const App = (() => {
   /* ===== DATES ===== */
 
   function renderDates() {
-    const items = (data.dates || []).slice().sort((a, b) => b.date.localeCompare(a.date));
+    const items = (data.dates || []).slice().sort((a, b) => safeDate(b.date).localeCompare(safeDate(a.date)));
     if (!items.length) return addBtn('添加约会', 'editDate()') + empty('第一次相遇，等你写下');
     const countHtml = `<div class="dates-header"><div class="dates-header__count">共记录了 <strong>${items.length}</strong> 次约会</div></div>`;
     return addBtn('添加约会', 'editDate()') + countHtml + items.map(i => {
@@ -433,11 +486,11 @@ const App = (() => {
         <option value="point" ${!isRange ? 'selected' : ''}>单日</option>
         <option value="range" ${isRange ? 'selected' : ''}>时间段</option>
       </select>
-      <label>日期</label><input type="date" id="f_date" value="${item.date}">
+      <label>日期</label><input type="date" id="f_date" value="${dateAttr(item.date)}">
       <div id="dateEndWrap" style="${isRange ? '' : 'display:none'}">
-        <label>结束日期</label><input type="date" id="f_dateEnd" value="${item.dateEnd || ''}">
+        <label>结束日期</label><input type="date" id="f_dateEnd" value="${dateAttr(item.dateEnd)}">
       </div>
-      <label>事件</label><input id="f_event" value="${esc(item.event)}" placeholder="例：去公园散步">
+      <label>事件</label><input id="f_event" value="${attr(item.event)}" placeholder="例：去公园散步">
       <label>备注</label><textarea id="f_note">${esc(item.note)}</textarea>
       <div class="modal__footer"><button class="btn-primary" onclick="App.saveDate(${id || 0})">保存</button></div>`);
   }
@@ -471,7 +524,7 @@ const App = (() => {
       });
       const items = sorted.map((p, idx) => {
         const stamp = p.createdAt ? fmtDate(p.createdAt.slice(0, 10)) : '';
-        return `<div class="note-slip note-slip--done note-colors-${idx % 6}" onclick="App.viewPlan(${p.id})" title="${esc(p.title)}">
+        return `<div class="note-slip note-slip--done note-colors-${idx % 6}" onclick="App.viewPlan(${p.id})" title="${attr(p.title)}">
           <span class="note-slip__title">${esc(p.title)}</span>
           ${stamp ? `<span class="note-slip__stamp">${stamp}</span>` : ''}
         </div>`;
@@ -494,7 +547,7 @@ const App = (() => {
   function editPlan(id) {
     const item = id ? (data.plans || []).find(i => i.id === id) : { title: '', type: 'short', done: false, note: '' };
     showModal(id ? '编辑纸条' : '写一张纸条', `
-      <label>内容</label><input id="f_title" value="${esc(item.title)}" placeholder="例：一起看一次海">
+      <label>内容</label><input id="f_title" value="${attr(item.title)}" placeholder="例：一起看一次海">
       <label>类型</label><select id="f_type"><option value="short" ${item.type === 'short' ? 'selected' : ''}>短期</option><option value="long" ${item.type === 'long' ? 'selected' : ''}>长期</option></select>
       <label>备注</label><textarea id="f_note">${esc(item.note)}</textarea>
       <div class="modal__footer"><button class="btn-primary" onclick="App.savePlan(${id || 0})">塞入瓶子</button></div>`);
@@ -642,7 +695,7 @@ const App = (() => {
   function editMemo(id) {
     const item = id ? (data.memos || []).find(i => i.id === id) : { title: '', description: '', content: '' };
     showModal(id ? '编辑备忘' : '添加备忘', `
-      <label>标题</label><input id="f_title" value="${esc(item.title)}" placeholder="例：共同银行卡密码">
+      <label>标题</label><input id="f_title" value="${attr(item.title)}" placeholder="例：共同银行卡密码">
       <div class="hint-text">例：共同银行卡号 / 对方衣服尺码 / WiFi密码 / 家务排班 / 常用地址</div>
       <label>介绍</label><textarea id="f_description" style="min-height:60px" placeholder="简要描述用途（可选）">${esc(item.description || '')}</textarea>
       <label>内容</label><textarea id="f_content" style="min-height:120px">${esc(item.content)}</textarea>
@@ -684,8 +737,9 @@ const App = (() => {
 
   function _matchCity(text) {
     if (!text) return '';
+    const value = String(text);
     for (const name of Object.keys(TRAVEL_CITIES)) {
-      if (text.indexOf(name) !== -1) return name;
+      if (value.indexOf(name) !== -1) return name;
     }
     return '';
   }
@@ -699,8 +753,8 @@ const App = (() => {
   const TRAVEL_GEO_CACHE_KEY = 'rj_china_geojson_v1';
   const ECHARTS_SDK_URLS = [
     'https://cdn.bootcdn.net/ajax/libs/echarts/5.5.1/echarts.min.js',
-    'https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js',
-    'https://unpkg.com/echarts@5/dist/echarts.min.js'
+    'https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js',
+    'https://unpkg.com/echarts@5.5.1/dist/echarts.min.js'
   ];
   const TRAVEL_GEO_URLS = [
     'https://geo.datav.aliyun.com/areas_v3/bound/100000_full.json',
@@ -950,7 +1004,7 @@ const App = (() => {
     const isRange = !!(item.dateEnd && item.dateEnd !== item.date);
     const currentCity = item.city || _matchCity(item.place) || '';
     const cityOptions = Object.keys(TRAVEL_CITIES).sort().map(name =>
-      `<option value="${name}" ${name === currentCity ? 'selected' : ''}>${name}</option>`
+      `<option value="${attr(name)}" ${name === currentCity ? 'selected' : ''}>${esc(name)}</option>`
     ).join('');
     showModal(id ? '编辑足迹' : '标记城市', `
       <label>城市</label>
@@ -965,9 +1019,9 @@ const App = (() => {
         <option value="point" ${!isRange ? 'selected' : ''}>单日</option>
         <option value="range" ${isRange ? 'selected' : ''}>时间段</option>
       </select>
-      <label>日期</label><input type="date" id="f_date" value="${item.date || todayISO()}">
+      <label>日期</label><input type="date" id="f_date" value="${dateAttr(item.date, todayISO())}">
       <div id="dateEndWrap" style="${isRange ? '' : 'display:none'}">
-        <label>结束日期</label><input type="date" id="f_dateEnd" value="${item.dateEnd || ''}">
+        <label>结束日期</label><input type="date" id="f_dateEnd" value="${dateAttr(item.dateEnd)}">
       </div>
       <label>备注</label><textarea id="f_note">${esc(item.note || '')}</textarea>
       <div class="modal__footer"><button class="btn-primary" onclick="App.saveTravel(${id || 0})">保存</button></div>`);
@@ -1002,7 +1056,7 @@ const App = (() => {
   function editSeriesTitle(id) {
     const item = id ? (data.series || []).find(i => i.id === id) : { title: '', note: '' };
     showModal(id ? '编辑系列' : '新建系列', `
-      <label>系列名称</label><input id="f_title" value="${esc(item.title)}" placeholder="例：一起看过的电影">
+      <label>系列名称</label><input id="f_title" value="${attr(item.title)}" placeholder="例：一起看过的电影">
       <label>简介</label><textarea id="f_note">${esc(item.note)}</textarea>
       <div class="modal__footer">${id ? `<button class="btn-secondary" style="color:#c0392b" onclick="App.delSeries(${id})">删除系列</button>` : ''}<button class="btn-primary" onclick="App.saveSeriesTitle(${id || 0})">保存</button></div>`);
   }
@@ -1039,8 +1093,8 @@ const App = (() => {
     const s = (data.series || []).find(i => i.id === seriesId); if (!s) return;
     const item = itemId ? (s.items || []).find(i => i.id === itemId) : { title: '', date: todayISO(), content: '' };
     showModal(itemId ? '编辑记录' : '添加记录', `
-      <label>标题</label><input id="f_title" value="${esc(item.title)}" placeholder="输入记录标题">
-      <label>日期</label><input type="date" id="f_date" value="${item.date}">
+      <label>标题</label><input id="f_title" value="${attr(item.title)}" placeholder="输入记录标题">
+      <label>日期</label><input type="date" id="f_date" value="${dateAttr(item.date)}">
       <label>内容</label><textarea id="f_content">${esc(item.content)}</textarea>
       <div class="modal__footer"><button class="btn-primary" onclick="App.saveSeriesItem(${seriesId},${itemId || 0})">保存</button></div>`);
   }
@@ -1097,7 +1151,7 @@ const App = (() => {
       <label>想对 TA 说的话</label>
       <textarea id="f_content" style="min-height:120px" placeholder="输入正文">${esc(item.content)}</textarea>
       <label>署名</label><select id="f_author">${nameOptionsRequired(item.author)}</select>
-      <label>日期</label><input type="date" id="f_date" value="${item.date}">
+      <label>日期</label><input type="date" id="f_date" value="${dateAttr(item.date)}">
       <div class="modal__footer"><button class="btn-primary" onclick="App.saveHeartword(${id || 0})">保存</button></div>`);
   }
 
@@ -1153,7 +1207,7 @@ const App = (() => {
       <label>你的问题</label>
       <textarea id="f_question" style="min-height:80px" placeholder="输入问题">${esc(item.question)}</textarea>
       <label>提问者</label><select id="f_asker">${nameOptionsRequired(item.asker)}</select>
-      <label>日期</label><input type="date" id="f_date" value="${item.date}">
+      <label>日期</label><input type="date" id="f_date" value="${dateAttr(item.date)}">
       <div class="modal__footer"><button class="btn-primary" onclick="App.saveQuestion(${id || 0})">保存</button></div>`);
   }
 
@@ -1239,14 +1293,14 @@ const App = (() => {
       <label>建议内容</label>
       <textarea id="f_content" style="min-height:100px" placeholder="输入建议内容">${esc(item.content)}</textarea>
       <label>提出者</label><select id="f_from" onchange="App.syncSuggestionTo()">
-        <option value="${esc(nameA)}" ${fromVal === nameA ? 'selected' : ''}>${esc(nameA)}</option>
-        ${nameB ? `<option value="${esc(nameB)}" ${fromVal === nameB ? 'selected' : ''}>${esc(nameB)}</option>` : ''}
+        <option value="${attr(nameA)}" ${fromVal === nameA ? 'selected' : ''}>${esc(nameA)}</option>
+        ${nameB ? `<option value="${attr(nameB)}" ${fromVal === nameB ? 'selected' : ''}>${esc(nameB)}</option>` : ''}
       </select>
       <label>给</label><select id="f_to">
-        ${nameB ? `<option value="${esc(nameB)}" ${toVal === nameB ? 'selected' : ''}>${esc(nameB)}</option>` : ''}
-        <option value="${esc(nameA)}" ${toVal === nameA ? 'selected' : ''}>${esc(nameA)}</option>
+        ${nameB ? `<option value="${attr(nameB)}" ${toVal === nameB ? 'selected' : ''}>${esc(nameB)}</option>` : ''}
+        <option value="${attr(nameA)}" ${toVal === nameA ? 'selected' : ''}>${esc(nameA)}</option>
       </select>
-      <label>日期</label><input type="date" id="f_date" value="${item.date}">
+      <label>日期</label><input type="date" id="f_date" value="${dateAttr(item.date)}">
       <div class="modal__footer"><button class="btn-primary" onclick="App.saveSuggestion(${id || 0})">保存</button></div>`);
   }
 
@@ -1345,7 +1399,7 @@ const App = (() => {
       <label>想对自己说的话</label>
       <textarea id="f_content" style="min-height:130px" placeholder="输入独白内容">${esc(item.content)}</textarea>
       <label>署名</label><select id="f_author">${nameOptionsRequired(item.author)}</select>
-      <label>日期</label><input type="date" id="f_date" value="${item.date}">
+      <label>日期</label><input type="date" id="f_date" value="${dateAttr(item.date)}">
       <div class="modal__footer"><button class="btn-primary" onclick="App.saveReflection(${id || 0})">保存</button></div>`);
   }
 
@@ -1370,7 +1424,7 @@ const App = (() => {
     const otherName = (item.author === nameA) ? nameB : nameA;
     const defaultSeenBy = otherName || nameA || nameB || '';
     const opts = [nameA, nameB].filter(Boolean).map(n =>
-      `<option value="${esc(n)}" ${defaultSeenBy === n ? 'selected' : ''}>${esc(n)}</option>`).join('');
+      `<option value="${attr(n)}" ${defaultSeenBy === n ? 'selected' : ''}>${esc(n)}</option>`).join('');
     showModal('我看到了', `
       <div style="font-size:.88rem;color:var(--text2);padding:.6rem;background:var(--surface2);border-radius:8px;margin-bottom:.6rem;line-height:1.55">${esc(item.content)}</div>
       <label>署名</label><select id="f_seen_by">${opts}</select>
@@ -1409,9 +1463,9 @@ const App = (() => {
   function editCouple() {
     const c = data.couple;
     showModal('恋爱信息', `
-      <label>关系确定日</label><input type="date" id="f_start" value="${c.startDate}">
-      <label>称呼 A</label><input id="f_na" value="${esc(c.nameA)}" placeholder="例：小明">
-      <label>称呼 B</label><input id="f_nb" value="${esc(c.nameB)}" placeholder="例：小红">
+      <label>关系确定日</label><input type="date" id="f_start" value="${dateAttr(c.startDate)}">
+      <label>称呼 A</label><input id="f_na" value="${attr(c.nameA)}" placeholder="例：小明">
+      <label>称呼 B</label><input id="f_nb" value="${attr(c.nameB)}" placeholder="例：小红">
       <div class="modal__footer"><button class="btn-primary" onclick="App.saveCouple()">保存</button></div>`);
   }
 

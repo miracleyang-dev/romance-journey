@@ -6,7 +6,7 @@
  * 文件位置：本 SW 位于 /js/sw.js，但注册时 scope 强制为 '/'（依赖
  *   nginx 返回 Service-Worker-Allowed: /），因此 SHELL 内全部使用根绝对路径，
  *   不能再用 './' 这类相对路径，否则会解析到 /js/ 下导致预缓存全部失败。 */
-const APP_VERSION = '20260824-01';
+const APP_VERSION = '20260913-01';
 const CACHE_NAME  = 'romance-journey-' + APP_VERSION;
 
 /* 需要预缓存的应用外壳；统一使用根绝对路径，避免 SW 落在子目录时 './' 被解析到 /js/。
@@ -63,9 +63,22 @@ function fetchWithTimeout(request, timeoutMs) {
     .finally(() => clearTimeout(timer));
 }
 
+function putCache(cacheKey, res) {
+  if (res && res.status === 200 && res.type === 'basic') {
+    const copy = res.clone();
+    caches.open(CACHE_NAME).then((c) => c.put(cacheKey, copy)).catch(() => {});
+  }
+  return res;
+}
+
+function matchStatic(req, cleanReq) {
+  return caches.match(req).then((cached) => cached || caches.match(cleanReq));
+}
+
 /* 抓取策略：
  *   - HTML / manifest.json：network-first，离线降级到缓存；
- *   - 同源静态资源：stale-while-revalidate，剥离 ?v= 命中缓存；
+ *   - JS / CSS：network-first，离线时降级到缓存，避免代码更新后仍运行旧脚本；
+ *   - 其它同源静态资源：cache-first + 后台更新；
  *   - Supabase / 第三方 / 非 GET：直通网络，不缓存。 */
 self.addEventListener('fetch', (event) => {
   const req = event.request;
@@ -80,27 +93,32 @@ self.addEventListener('fetch', (event) => {
 
   if (isHTML || isManifest) {
     event.respondWith(
-      fetchWithTimeout(req, 3500).then((res) => {
-        const copy = res.clone();
-        caches.open(CACHE_NAME).then((c) => c.put(req, copy)).catch(() => {});
-        return res;
-      }).catch(() => caches.match(req).then((r) => r || caches.match('/index.html')))
+      fetchWithTimeout(req, 3500)
+        .then((res) => putCache(req, res))
+        .catch(() => caches.match(req).then((r) => r || caches.match('/index.html')))
     );
     return;
   }
 
-  // 静态资源：剥离 ?v= 后再做 cache key
+  // JS/CSS 优先网络：改代码后即使忘记手动改 ?v=，刷新也能拿到新内容；离线再回退缓存。
   const cleanUrl = url.origin + url.pathname;
   const cleanReq = new Request(cleanUrl, { credentials: req.credentials });
+  const isFreshAsset = /\.(?:js|css)$/.test(url.pathname);
+
+  if (isFreshAsset) {
+    const cacheKey = url.search ? req : cleanReq;
+    event.respondWith(
+      fetchWithTimeout(req, 2500)
+        .then((res) => putCache(cacheKey, res))
+        .catch(() => matchStatic(cacheKey, cleanReq))
+    );
+    return;
+  }
 
   event.respondWith(
-    caches.match(cleanReq).then((cached) => {
+    matchStatic(req, cleanReq).then((cached) => {
       const network = fetch(req).then((res) => {
-        if (res && res.status === 200 && res.type === 'basic') {
-          const copy = res.clone();
-          caches.open(CACHE_NAME).then((c) => c.put(cleanReq, copy)).catch(() => {});
-        }
-        return res;
+        return putCache(cleanReq, res);
       }).catch(() => cached);
       return cached || network;
     })

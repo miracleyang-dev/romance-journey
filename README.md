@@ -81,7 +81,8 @@ Service Worker 行为：
 - **activate**：删除所有 `romance-journey-` 前缀但版本号不匹配的旧缓存。
 - **fetch**：
   - HTML / manifest 走 **network-first**，离线时降级到缓存；
-  - 同源静态资源走 **stale-while-revalidate**，并剥离 `?v=` 命中干净 URL 缓存；
+  - JS / CSS 走 **network-first**，离线时降级到缓存，避免刷新后仍执行旧代码；
+  - 图标等其它同源静态资源走 **cache-first + 后台更新**；
   - Supabase 等跨域请求直通网络。
 - 页面端在监听到新 SW 接管（`controllerchange`）时会自动 reload 一次，确保用户拿到最新代码。
 

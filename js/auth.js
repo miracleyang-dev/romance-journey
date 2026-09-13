@@ -2,6 +2,7 @@ const Auth = (() => {
   // 仅记忆邮箱用于登录界面预填，避免在 localStorage 中保存密码
   // (Supabase SDK 自身已会持久化 session token，刷新页面会自动恢复登录态)
   const EMAIL_KEY = 'rj_saved_email';
+  let _authBusy = false;
 
   function _saveEmail(email) {
     try { localStorage.setItem(EMAIL_KEY, email || ''); } catch (_) {}
@@ -29,6 +30,12 @@ const Auth = (() => {
     if (el) el.textContent = msg;
   }
 
+  function _setBusy(busy, msg) {
+    _authBusy = busy;
+    document.querySelectorAll('.auth-btn').forEach(btn => { btn.disabled = busy; });
+    if (msg) _showError(msg);
+  }
+
   function renderAuthScreen() {
     document.getElementById('bottomnav').innerHTML = '';
     document.getElementById('backBtn').hidden = true;
@@ -43,14 +50,14 @@ const Auth = (() => {
         '<div class="auth-heart"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M32 56C29.5 53.9 7 40.3 7 23.5C7 15.2 13.1 9 21.3 9C27.1 9 31.2 12.4 32 13.5C32.8 12.4 36.9 9 42.7 9C50.9 9 57 15.2 57 23.5C57 40.3 34.5 53.9 32 56Z"/></svg></div>' +
         '<h2 class="auth-title">恋爱日志</h2>' +
         '<p class="auth-subtitle">登录后双人共享，数据云端同步</p>' +
-        '<div class="auth-form">' +
-          '<input id="authEmail" type="email" placeholder="邮箱" value="' + _escAttr(prefillEmail) + '">' +
-          '<input id="authPwd" type="password" placeholder="密码（至少 6 位）">' +
+        '<form class="auth-form" onsubmit="event.preventDefault();Auth.login()">' +
+          '<input id="authEmail" type="email" placeholder="邮箱" autocomplete="email" inputmode="email" value="' + _escAttr(prefillEmail) + '">' +
+          '<input id="authPwd" type="password" placeholder="密码（至少 6 位）" autocomplete="current-password">' +
           '<label class="auth-remember"><input type="checkbox" id="authRemember"' + (checked ? ' checked' : '') + '><span>记住邮箱</span></label>' +
-          '<button class="btn-primary auth-btn" onclick="Auth.login()">登录</button>' +
-          '<button class="btn-secondary auth-btn" onclick="Auth.register()">注册新账号</button>' +
+          '<button class="btn-primary auth-btn" type="submit">登录</button>' +
+          '<button class="btn-secondary auth-btn" type="button" onclick="Auth.register()">注册新账号</button>' +
           '<div class="auth-error" id="authError"></div>' +
-        '</div>' +
+        '</form>' +
       '</div>';
   }
 
@@ -61,13 +68,15 @@ const Auth = (() => {
   }
 
   async function login() {
+    if (_authBusy) return;
     const email = (document.getElementById('authEmail')?.value || '').trim();
     const pwd = document.getElementById('authPwd')?.value || '';
     if (!email || !pwd) { _showError('请填写邮箱和密码'); return; }
-    _showError('登录中...');
-    const sb = Store.client();
-    if (!sb) { _showError('连接服务失败，请检查网络后刷新页面'); return; }
+    _setBusy(true, '正在连接服务...');
     try {
+      const sb = await Store.ready();
+      if (!sb) { _showError('连接服务超时，请检查网络后重试'); return; }
+      _showError('登录中...');
       const result = await sb.auth.signInWithPassword({ email, password: pwd });
       if (result.error) { _showError('登录失败：' + result.error.message); return; }
       _handleRemember(email);
@@ -75,18 +84,22 @@ const Auth = (() => {
     } catch (error) {
       console.error('login', error);
       _showError('登录失败，请检查网络后重试');
+    } finally {
+      _setBusy(false);
     }
   }
 
   async function register() {
+    if (_authBusy) return;
     const email = (document.getElementById('authEmail')?.value || '').trim();
     const pwd = document.getElementById('authPwd')?.value || '';
     if (!email || !pwd) { _showError('请填写邮箱和密码'); return; }
     if (pwd.length < 6) { _showError('密码至少 6 位'); return; }
-    _showError('注册中...');
-    const sb = Store.client();
-    if (!sb) { _showError('连接服务失败，请检查网络后刷新页面'); return; }
+    _setBusy(true, '正在连接服务...');
     try {
+      const sb = await Store.ready();
+      if (!sb) { _showError('连接服务超时，请检查网络后重试'); return; }
+      _showError('注册中...');
       const result = await sb.auth.signUp({ email, password: pwd });
       if (result.error) { _showError('注册失败：' + result.error.message); return; }
       _handleRemember(email);
@@ -99,6 +112,8 @@ const Auth = (() => {
     } catch (error) {
       console.error('register', error);
       _showError('注册失败，请检查网络后重试');
+    } finally {
+      _setBusy(false);
     }
   }
 

@@ -4,44 +4,84 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
   <title>恋爱日志</title>
+  <script>window.__APP_VERSION__ = '20260913-01';</script>
+  <link rel="preconnect" href="https://xdkvzpdwvvyywnqgheup.supabase.co" crossorigin>
+  <link rel="dns-prefetch" href="https://xdkvzpdwvvyywnqgheup.supabase.co">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+  <link rel="preconnect" href="https://unpkg.com" crossorigin>
+  <link rel="dns-prefetch" href="https://unpkg.com">
   <!-- 静态资源版本号：发版当天日期 yyyymmdd（同日多次发版可改为 yyyymmdd-HHMM）
        与 sw.js 中 APP_VERSION、manifest.json 中 version 同步维护即可。 -->
-  <link rel="icon" type="image/svg+xml" sizes="any" href="icons/favicon.svg?v=20260824-01">
-  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png?v=20260824-01">
-  <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png?v=20260824-01">
-  <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png?v=20260824-01">
-  <link rel="manifest" href="manifest.json?v=20260824-01">
+  <link rel="icon" type="image/svg+xml" sizes="any" href="icons/favicon.svg?v=20260913-01">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png?v=20260913-01">
+  <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png?v=20260913-01">
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png?v=20260913-01">
+  <link rel="manifest" href="manifest.json?v=20260913-01">
   <meta name="theme-color" content="#d4726a">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="恋爱日志">
   <meta name="application-name" content="恋爱日志">
-  <link rel="stylesheet" href="css/style.css?v=20260824-01">
+  <link rel="stylesheet" href="css/style.css?v=20260913-01">
   <script>
-    // Supabase SDK 多源兜底：移动端某个 CDN 不稳定时自动切换。
-    window.__supabaseReady = (function () {
+    // Supabase SDK 多源限时兜底：避免移动端/PC 因首个 CDN 卡住而白屏。
+    window.__loadSupabaseSdk = function () {
       if (window.supabase && typeof window.supabase.createClient === 'function') return Promise.resolve(true);
       const urls = [
-        'https://cdn.bootcdn.net/ajax/libs/supabase-js/2.50.0/umd/supabase.min.js',
-        'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js',
-        'https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.min.js'
+        'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.50.0/dist/umd/supabase.min.js',
+        'https://unpkg.com/@supabase/supabase-js@2.50.0/dist/umd/supabase.min.js',
+        'https://cdn.bootcdn.net/ajax/libs/supabase-js/2.50.0/umd/supabase.min.js'
       ];
-      const loadOne = (i) => new Promise((resolve) => {
-        if (i >= urls.length) { resolve(false); return; }
+      const hasClient = () => !!(window.supabase && typeof window.supabase.createClient === 'function');
+      const loadOne = (url, timeoutMs) => new Promise((resolve, reject) => {
         const s = document.createElement('script');
-        s.src = urls[i];
+        let done = false;
+        const timer = setTimeout(() => {
+          if (done) return;
+          done = true;
+          try { s.remove(); } catch (_) {}
+          reject(new Error('timeout'));
+        }, timeoutMs);
+        s.src = url;
         s.async = true;
         s.onload = () => {
-          resolve(!!(window.supabase && typeof window.supabase.createClient === 'function'));
+          if (done) return;
+          done = true;
+          clearTimeout(timer);
+          hasClient() ? resolve(true) : reject(new Error('missing client'));
         };
-        s.onerror = () => resolve(loadOne(i + 1));
+        s.onerror = () => {
+          if (done) return;
+          done = true;
+          clearTimeout(timer);
+          try { s.remove(); } catch (_) {}
+          reject(new Error('load failed'));
+        };
         document.head.appendChild(s);
       });
-      return loadOne(0);
-    })();
+      return new Promise((resolve) => {
+        let settled = false;
+        let failed = 0;
+        const finish = (ok) => {
+          if (settled) return;
+          if (ok || failed >= urls.length) {
+            settled = true;
+            resolve(hasClient());
+          }
+        };
+        urls.forEach((url, i) => {
+          setTimeout(() => {
+            if (settled || hasClient()) { finish(true); return; }
+            loadOne(url, 4500).then(() => finish(true)).catch(() => { failed += 1; finish(false); });
+          }, i * 250);
+        });
+      });
+    };
+    window.__supabaseReady = window.__loadSupabaseSdk();
   </script>
-  <script src="js/config.js?v=20260824-01"></script>
+  <script src="js/config.js?v=20260913-01"></script>
 </head>
 <body>
   <!-- 顶栏 -->
@@ -69,10 +109,10 @@
     </div>
   </div>
 
-  <script src="js/lunar.js?v=20260824-01"></script>
-  <script src="js/store.js?v=20260824-01"></script>
-  <script src="js/auth.js?v=20260824-01"></script>
-  <script src="js/app.js?v=20260824-01"></script>
+  <script src="js/lunar.js?v=20260913-01"></script>
+  <script src="js/store.js?v=20260913-01"></script>
+  <script src="js/auth.js?v=20260913-01"></script>
+  <script src="js/app.js?v=20260913-01"></script>
 
   <!-- 注册 Service Worker；版本号变化时新 SW 安装后会清掉旧 cache
        sw.js 实际位于 /js/sw.js，但通过 scope:'/' + 服务端 Service-Worker-Allowed: /
@@ -80,7 +120,7 @@
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('js/sw.js?v=20260824-01', { scope: '/' }).then((reg) => {
+        navigator.serviceWorker.register('js/sw.js?v=20260913-01', { scope: '/' }).then((reg) => {
           if (reg.waiting) reg.waiting.postMessage('SKIP_WAITING');
           reg.addEventListener('updatefound', () => {
             const sw = reg.installing;
